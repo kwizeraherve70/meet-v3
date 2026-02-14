@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "prisma": {
+      "command": "node",
+      "args": [
+        "-e",
+        "const { PrismaServer } = require('@mcp/server-prisma'); const server = new PrismaServer(); server.run();"
+      ],
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      }
+    },
+    "neon": {
+      "command": "npx",
+      "args": [
+        "@neondatabase/mcp-server"
+      ],
+      "env": {
+        "NEON_API_KEY": "${NEON_API_KEY}"
+      }
+    }
+  }
+}

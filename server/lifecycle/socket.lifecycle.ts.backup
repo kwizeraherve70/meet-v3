@@ -1,0 +1,13 @@
+/**
+ * Socket lifecycle management
+ * Note: These functions are now integrated into socket handlers and auth middleware
+ * Keeping for reference and future expansion
+ */
+
+export default {
+  handleConnection: () => {},
+  handleAuthentication: () => {},
+  handleJoinRoom: () => {},
+  handleLeaveRoom: () => {},
+  handleDisconnect: () => {},
+};

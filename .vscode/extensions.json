@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "prisma.prisma",
+    "ms-python.python",
+    "GitHub.copilot",
+    "eamodio.gitlens",
+    "sonarsource.sonarlint-vscode",
+    "ms-azuretools.vscode-docker",
+    "postman.postman-for-vscode"
+  ]
+}

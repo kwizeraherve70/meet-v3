@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model: stores all registered users
+model User {
+  id        Int       @id @default(autoincrement())
+  name      String
+  email     String    @unique
+  passwordHash String  @map("password_hash")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  createdRooms   Room[]         @relation("CreatedRooms")
+  participants   Participant[]
+  messages       Message[]
+  refreshTokens  RefreshToken[]
+
+  @@index([email])
+  @@map("users")
+}
+
+// Room model: stores meeting rooms
+model Room {
+  id          Int     @id @default(autoincrement())
+  roomCode    String  @unique @map("room_code")
+  createdById Int     @map("created_by")
+  title       String  @default("Untitled Meeting")
+  description String?
+  startTime   DateTime @default(now()) @map("start_time")
+  endTime     DateTime? @map("end_time")
+  isActive    Boolean @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  createdBy    User          @relation("CreatedRooms", fields: [createdById], references: [id], onDelete: Cascade)
+  participants Participant[]
+  messages     Message[]
+  recordings   Recording[]
+
+  @@index([createdById])
+  @@index([roomCode])
+  @@map("rooms")
+}
+
+// Participant model: tracks who joined which room and when
+// Supports both registered users (userId set) and guests (guestName set)
+model Participant {
+  id           Int       @id @default(autoincrement())
+  roomId       Int       @map("room_id")
+  userId       Int?      @map("user_id")
+  guestName    String?   @map("guest_name")
+  isGuest      Boolean   @default(false) @map("is_guest")
+  joinedAt     DateTime  @default(now()) @map("joined_at")
+  leftAt       DateTime? @map("left_at")
+  isHost       Boolean   @default(false) @map("is_host")
+  isHandRaised Boolean   @default(false) @map("is_hand_raised")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  room   Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user   User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([userId])
+  @@map("participants")
+}
+
+// Message model: stores chat messages during meetings
+// Supports both registered users (userId set) and guests (guestName set)
+model Message {
+  id        Int       @id @default(autoincrement())
+  roomId    Int       @map("room_id")
+  userId    Int?      @map("user_id")
+  guestName String?   @map("guest_name")
+  content   String
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  room  Room  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([userId])
+  @@map("messages")
+}
+
+// RefreshToken model: stores JWT refresh tokens for authentication
+model RefreshToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int      @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// Recording model: stores meeting recordings
+model Recording {
+  id        Int      @id @default(autoincrement())
+  roomId    Int      @map("room_id")
+  title     String
+  duration  Int      // Duration in seconds
+  fileUrl   String   @map("file_url")
+  thumbnail String?  // URL to thumbnail image
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([createdAt])
+  @@map("recordings")
+}
+
