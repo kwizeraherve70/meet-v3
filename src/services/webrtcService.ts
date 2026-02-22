@@ -23,6 +23,7 @@ export interface CallState {
 class WebRTCService {
   private static instance: WebRTCService | null = null;
   private peerConnections: Map<string, RTCPeerConnection> = new Map();
+  private iceCandidateQueues: Map<string, RTCIceCandidateInit[]> = new Map();
   private localStream: MediaStream | null = null;
   private stateChangeCallback: ((state: CallState) => void) | null = null;
   private hasJoined: boolean = false;
@@ -187,20 +188,19 @@ class WebRTCService {
           [user.username]: user
         }
       });
-
-      // Start connection with new user
-      if (user.username !== this.state.currentUser) {
-        console.log('Starting call with new user:', user.username);
-        this.startCallWithUser(user.username).catch(error => {
-          console.error('Failed to start call with new user:', error);
-        });
-      }
+      
+      // DO NOT start call here. The new user will initiate via 'sync-peers'.
+      // This prevents "glare" (both sides sending offers at once).
     });
 
     // User left event
     socketService.on('user-left', (data: any) => {
       console.log('User left:', data);
-      this.handleUserLeft(data.username);
+      // Server sends userName (camelCase) not username
+      const leftUsername = data.userName || data.username;
+      if (leftUsername) {
+        this.handleUserLeft(leftUsername);
+      }
     });
 
     // WebRTC signaling events
@@ -255,27 +255,41 @@ class WebRTCService {
       }
     });
 
-    // Media state changed
-    socketService.on('media-state-changed', (data: any) => {
-      this.handleUserMediaStateChanged(data.userId, data.isVideoEnabled, data.isAudioEnabled);
+    // Media state changed: Server emits 'user-media-state'
+    socketService.on('user-media-state', (data: any) => {
+      const { userId, mediaState } = data;
+      // We need to find the username for this userId to update our state
+      const username = Object.keys(this.state.users).find(
+        uname => this.state.users[uname].id === userId.toString()
+      );
+      if (username) {
+        this.handleUserMediaStateChanged(username, mediaState.isVideoEnabled, mediaState.isAudioEnabled);
+      }
     });
 
     // Room joined - receive existing participants when joining mid-call
     socketService.on('room-joined', async (data: any) => {
       console.log('Room joined event received:', data);
       const { participants, isHost } = data;
-      
-      // Add all participants to users list
+
+      // Add all existing participants (excluding ourselves) to users list
       if (participants && Array.isArray(participants)) {
         const newUsers = { ...this.state.users };
         for (const participant of participants) {
-          if (participant.userName !== this.state.currentUser) {
+          // Filter out ourselves — server now includes the joining user in the list
+          const isSelf =
+            participant.userName === this.state.currentUser ||
+            (participant.userId != null &&
+              participant.userId.toString() === this.state.users[this.state.currentUser || '']?.id);
+
+          if (!isSelf) {
+            console.log('Adding existing participant from room-joined:', participant.userName);
             newUsers[participant.userName] = {
               username: participant.userName,
-              id: participant.userId.toString(),
+              id: participant.userId?.toString() || `remote_${Date.now()}`,
               isLocal: false,
               isVideoEnabled: true,
-              isAudioEnabled: true
+              isAudioEnabled: true,
             };
           }
         }
@@ -287,19 +301,43 @@ class WebRTCService {
     socketService.on('sync-peers', async (data: any) => {
       console.log('Sync peers event received:', data);
       const { peers } = data;
-      
+
       if (peers && Array.isArray(peers)) {
         console.log(`Starting calls with ${peers.length} existing peers`);
-        // Start call with each peer to initiate offer/answer flow
         for (const peer of peers) {
-          if (peer.userName !== this.state.currentUser) {
-            // Add small delay to avoid overwhelming the connection
-            await new Promise(resolve => setTimeout(resolve, 100));
-            try {
-              await this.startCallWithUser(peer.userName);
-            } catch (error) {
-              console.error(`Failed to start call with ${peer.userName}:`, error);
-            }
+          // Filter self by userName AND by userId (server sends both)
+          const isSelf =
+            peer.userName === this.state.currentUser ||
+            (peer.userId != null &&
+              peer.userId.toString() === this.state.users[this.state.currentUser || '']?.id);
+
+          if (isSelf) {
+            console.log('Skipping self in sync-peers:', peer.userName);
+            continue;
+          }
+
+          // Ensure the peer is in state so the UI shows them immediately
+          if (!this.state.users[peer.userName]) {
+            this.updateState({
+              users: {
+                ...this.state.users,
+                [peer.userName]: {
+                  username: peer.userName,
+                  id: peer.userId?.toString() || `remote_${Date.now()}`,
+                  isLocal: false,
+                  isVideoEnabled: true,
+                  isAudioEnabled: true,
+                },
+              },
+            });
+          }
+
+          // Stagger offers slightly to avoid race conditions
+          await new Promise(resolve => setTimeout(resolve, 150));
+          try {
+            await this.startCallWithUser(peer.userName);
+          } catch (error) {
+            console.error(`Failed to start call with ${peer.userName}:`, error);
           }
         }
       }
@@ -344,14 +382,29 @@ class WebRTCService {
 
     // Handle remote stream
     pc.ontrack = (event) => {
-      console.log('Received remote track from:', remoteUser);
-      const remoteStream = event.streams[0];
-      this.updateState({ 
-        remoteStreams: {
-          ...this.state.remoteStreams,
-          [remoteUser]: remoteStream
+      console.log(`Received remote track (${event.track.kind}) from:`, remoteUser);
+      
+      this.updateState(prevState => {
+        const existingStream = prevState.remoteStreams[remoteUser];
+        let remoteStream: MediaStream;
+        
+        if (existingStream) {
+          existingStream.addTrack(event.track);
+          remoteStream = existingStream;
+        } else {
+          remoteStream = event.streams[0] || new MediaStream([event.track]);
         }
+        
+        return { 
+          remoteStreams: {
+            ...prevState.remoteStreams,
+            [remoteUser]: remoteStream
+          }
+        };
       });
+
+      // Force connection state to connected when we start receiving media
+      this.updateUserConnectionState(remoteUser, 'connected');
     };
 
     // Handle ICE candidates
@@ -384,6 +437,10 @@ class WebRTCService {
     // Handle ICE connection state changes
     pc.oniceconnectionstatechange = () => {
       console.log(`ICE connection state with ${remoteUser}:`, pc.iceConnectionState);
+      
+      if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        this.updateUserConnectionState(remoteUser, 'connected');
+      }
       
       if (pc.iceConnectionState === 'failed') {
         // Try to restart ICE
@@ -501,7 +558,7 @@ class WebRTCService {
 
   startWithToken(token: string) {
     console.log("🚀 Starting WebRTC with token...");
-    socketService.connect(token);
+    socketService.connect();
   }
 
   async autoRejoinUser(username: string, roomId: string): Promise<void> {
@@ -648,6 +705,18 @@ class WebRTCService {
       // Set remote description
       await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
 
+      // Process queued ICE candidates
+      const queue = this.iceCandidateQueues.get(from) || [];
+      this.iceCandidateQueues.delete(from);
+      console.log(`Processing ${queue.length} queued ICE candidates for ${from}`);
+      for (const candidate of queue) {
+        try {
+          await peerConnection.addIceCandidate(candidate);
+        } catch (e) {
+          console.error(`Error adding queued ICE candidate for ${from}:`, e);
+        }
+      }
+
       // Create answer
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
@@ -668,6 +737,18 @@ class WebRTCService {
     if (peerConnection) {
       try {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        
+        // Process queued ICE candidates
+        const queue = this.iceCandidateQueues.get(from) || [];
+        this.iceCandidateQueues.delete(from);
+        console.log(`Processing ${queue.length} queued ICE candidates for ${from}`);
+        for (const candidate of queue) {
+          try {
+            await peerConnection.addIceCandidate(candidate);
+          } catch (e) {
+            console.error(`Error adding queued ICE candidate for ${from}:`, e);
+          }
+        }
       } catch (error) {
         console.error('Error setting remote description for answer from', from, ':', error);
       }
@@ -676,19 +757,31 @@ class WebRTCService {
     }
   }
 
-  private async handleIceCandidate(from: string, candidate: RTCIceCandidate) {
+  private async handleIceCandidate(from: string, candidate: RTCIceCandidateInit | null) {
     const peerConnection = this.peerConnections.get(from);
+    if (!candidate) return; // End of candidates
+
     if (peerConnection) {
-      try {
-        // Handle null candidate (end of candidates)
-        if (candidate) {
+      // If remote description is already set, add candidate immediately
+      if (peerConnection.remoteDescription) {
+        try {
           await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (error) {
+          console.error('Error adding ICE candidate from', from, ':', error);
         }
-      } catch (error) {
-        console.error('Error adding ICE candidate from', from, ':', error);
+      } else {
+        // Otherwise queue it
+        console.log(`Queueing ICE candidate from ${from} (no remote description yet)`);
+        const queue = this.iceCandidateQueues.get(from) || [];
+        queue.push(candidate);
+        this.iceCandidateQueues.set(from, queue);
       }
     } else {
-      console.warn('No peer connection found for ICE candidate from:', from);
+      // If no PC yet, queue it anyway
+      console.log(`Queueing ICE candidate from ${from} (no PeerConnection yet)`);
+      const queue = this.iceCandidateQueues.get(from) || [];
+      queue.push(candidate);
+      this.iceCandidateQueues.set(from, queue);
     }
   }
 
@@ -760,7 +853,8 @@ class WebRTCService {
     this.updateState({ remoteStreams: newRemoteStreams });
 
     // Try to reconnect if user is still in the room
-    if (this.state.users[remoteUser] && this.socket?.connected) {
+    // Try to reconnect if user is still in the room
+    if (this.state.users[remoteUser] && socketService.isSocketConnected()) {
       try {
         await this.startCallWithUser(remoteUser);
       } catch (error) {
@@ -853,10 +947,9 @@ class WebRTCService {
     // Close all peer connections
     this.peerConnections.forEach((pc, username) => {
       pc.close();
-      if (socketService.isSocketConnected()) {
+      if (socketService.isSocketConnected() && this.state.roomId) {
         socketService.emit('leave-room', {
-          from: this.state.currentUser,
-          to: username
+          roomId: this.state.roomId
         });
       }
     });
