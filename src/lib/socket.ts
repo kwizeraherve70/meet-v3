@@ -12,27 +12,29 @@ const SOCKET_URL = 'http://localhost:3001';
 
 export interface SocketEvents {
   // Room events
-  'join-room': { roomId: number; username: string };
-  'leave-room': { roomId: number };
-  'send-message': { roomId: number; content: string };
-  'request-chat-history': { roomId: number; limit?: number; offset?: number };
-  'search-messages': { roomId: number; query: string; limit?: number; offset?: number };
-  'update-media-state': { roomId: number; isVideoEnabled: boolean; isAudioEnabled: boolean };
+  'join-room': { roomId: string | number; username: string };
+  'leave-room': { roomId: string | number };
+  'room-joined': { participants: any[]; isHost: boolean; roomId: string | number };
+  'sync-peers': { peers: any[]; message?: string };
+  'send-message': { roomId: string | number; content: string };
+  'request-chat-history': { roomId: string | number; limit?: number; offset?: number };
+  'search-messages': { roomId: string | number; query: string; limit?: number; offset?: number };
+  'update-media-state': { roomId: string | number; isVideoEnabled: boolean; isAudioEnabled: boolean };
   
   // Signaling events
-  'offer': { targetUserId: number; roomId: number; offer: string };
-  'answer': { targetUserId: number; roomId: number; answer: string };
-  'icecandidate': { targetUserId: number; roomId: number; candidate: string };
+  'offer': { to: string | number; roomId: string | number; offer: any };
+  'answer': { to: string | number; roomId: string | number; answer: any };
+  'icecandidate': { to: string | number; roomId: string | number; candidate: any };
   
   // Server events
-  'user-joined': { userId: number; username: string; roomId: number };
-  'user-left': { userId: number; username: string };
-  'message-received': { id: number; userId: number; userName: string; content: string; created_at: string };
-  'chat-history': { messages: any[]; hasMore: boolean };
-  'search-results': { results: any[] };
-  'participants-updated': { participants: any[] };
-  'media-state-changed': { userId: number; isVideoEnabled: boolean; isAudioEnabled: boolean };
+  'user-joined': { userId: string | number; userName: string; isHost?: boolean };
+  'user-left': { userId: string | number; userName: string };
+  'message-received': { id: string | number; userId: string | number; userName: string; content: string; timestamp: string };
+  'message-history': { roomId: string | number; messages: any[]; count: number };
+  'user-media-state': { userId: string | number; mediaState: { isVideoEnabled: boolean; isAudioEnabled: boolean } };
   'error': { message: string };
+  'connected': {};
+  'disconnected': {};
 }
 
 class SocketService {
@@ -231,12 +233,12 @@ class SocketService {
       return () => {};
     }
 
-    this.socket.on(event, handler);
+    this.socket.on(event, handler as any);
 
     // Return unsubscribe function
     return () => {
       if (this.socket) {
-        this.socket.off(event, handler);
+        this.socket.off(event, handler as any);
       }
     };
   }
@@ -252,7 +254,7 @@ class SocketService {
       console.error(`Cannot listen to ${event}: Socket not initialized`);
       return;
     }
-    this.socket.once(event, handler);
+    this.socket.once(event, handler as any);
   }
 
   /**
@@ -299,9 +301,9 @@ class SocketService {
   /**
    * Join a room
    */
-  joinRoom(roomId: number | string, username: string): void {
+  joinRoom(roomId: string | number, username: string): void {
     this.emit('join-room', { 
-      roomId: typeof roomId === 'string' ? parseInt(roomId, 10) : roomId,
+      roomId,
       username 
     });
   }
@@ -309,18 +311,18 @@ class SocketService {
   /**
    * Leave a room
    */
-  leaveRoom(roomId: number | string): void {
+  leaveRoom(roomId: string | number): void {
     this.emit('leave-room', { 
-      roomId: typeof roomId === 'string' ? parseInt(roomId, 10) : roomId
+      roomId
     });
   }
 
   /**
    * Send a chat message
    */
-  sendMessage(roomId: number | string, content: string): void {
+  sendMessage(roomId: string | number, content: string): void {
     this.emit('send-message', {
-      roomId: typeof roomId === 'string' ? parseInt(roomId, 10) : roomId,
+      roomId,
       content
     });
   }
@@ -328,9 +330,9 @@ class SocketService {
   /**
    * Request chat history
    */
-  requestChatHistory(roomId: number | string, limit?: number, offset?: number): void {
+  requestChatHistory(roomId: string | number, limit?: number, offset?: number): void {
     this.emit('request-chat-history', {
-      roomId: typeof roomId === 'string' ? parseInt(roomId, 10) : roomId,
+      roomId,
       limit,
       offset
     });
@@ -339,42 +341,42 @@ class SocketService {
   /**
    * Send WebRTC offer
    */
-  sendOffer(targetUserId: number, roomId: number | string, offer: RTCSessionDescription): void {
+  sendOffer(to: string | number, roomId: string | number, offer: any): void {
     this.emit('offer', {
-      targetUserId,
-      roomId: typeof roomId === 'string' ? parseInt(roomId, 10) : roomId,
-      offer: JSON.stringify(offer)
+      to,
+      roomId,
+      offer
     });
   }
 
   /**
    * Send WebRTC answer
    */
-  sendAnswer(targetUserId: number, roomId: number | string, answer: RTCSessionDescription): void {
+  sendAnswer(to: string | number, roomId: string | number, answer: any): void {
     this.emit('answer', {
-      targetUserId,
-      roomId: typeof roomId === 'string' ? parseInt(roomId, 10) : roomId,
-      answer: JSON.stringify(answer)
+      to,
+      roomId,
+      answer
     });
   }
 
   /**
    * Send ICE candidate
    */
-  sendIceCandidate(targetUserId: number, candidate: any): void {
+  sendIceCandidate(to: string | number, roomId: string | number, candidate: any): void {
     this.emit('icecandidate', {
-      targetUserId,
-      roomId: 0, // Will be set by backend
-      candidate: JSON.stringify(candidate)
+      to,
+      roomId,
+      candidate
     });
   }
 
   /**
    * Update media state (video/audio on/off)
    */
-  updateMediaState(roomId: number | string, isVideoEnabled: boolean, isAudioEnabled: boolean): void {
+  updateMediaState(roomId: string | number, isVideoEnabled: boolean, isAudioEnabled: boolean): void {
     this.emit('update-media-state', {
-      roomId: typeof roomId === 'string' ? parseInt(roomId, 10) : roomId,
+      roomId,
       isVideoEnabled,
       isAudioEnabled
     });
