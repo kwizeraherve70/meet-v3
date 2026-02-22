@@ -19,7 +19,7 @@ export interface SocketEvents {
   'send-message': { roomId: string | number; content: string };
   'request-chat-history': { roomId: string | number; limit?: number; offset?: number };
   'search-messages': { roomId: string | number; query: string; limit?: number; offset?: number };
-  'update-media-state': { roomId: string | number; isVideoEnabled: boolean; isAudioEnabled: boolean };
+  'update-media-state': { roomId: string | number; mediaState: { isVideoEnabled: boolean; isAudioEnabled: boolean } };
   
   // Signaling events
   'offer': { to: string | number; roomId: string | number; offer: any };
@@ -377,8 +377,10 @@ class SocketService {
   updateMediaState(roomId: string | number, isVideoEnabled: boolean, isAudioEnabled: boolean): void {
     this.emit('update-media-state', {
       roomId,
-      isVideoEnabled,
-      isAudioEnabled
+      mediaState: {
+        isVideoEnabled,
+        isAudioEnabled
+      }
     });
   }
 }
