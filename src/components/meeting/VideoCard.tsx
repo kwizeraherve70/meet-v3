@@ -28,17 +28,30 @@ const VideoCard = ({
 
   useEffect(() => {
     if (videoRef.current && stream && isVideoOn) {
-      videoRef.current.srcObject = stream;
+      // Check if current srcObject is same to avoid unnecessary reload
+      if (videoRef.current.srcObject !== stream) {
+        videoRef.current.srcObject = stream;
+      }
+      
       // Ensure video plays
-      videoRef.current.play().catch(err => {
-        console.warn('Video autoplay failed:', err);
-      });
+      const playVideo = async () => {
+        try {
+          if (videoRef.current) {
+            await videoRef.current.play();
+          }
+        } catch (err) {
+          console.warn('Video autoplay failed:', err);
+        }
+      };
+      
+      playVideo();
     } else if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
   }, [stream, isVideoOn]);
 
-  const hasVideo = isVideoOn && stream;
+  // Only show video element if we have a stream with enabled video tracks
+  const hasVideo = isVideoOn && stream && stream.getVideoTracks().some(t => t.enabled);
 
   return (
     <div
