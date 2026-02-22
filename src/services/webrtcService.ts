@@ -165,6 +165,12 @@ class WebRTCService {
 
       // Handle field name from server (userName not username)
       const username = data.userName || data.username;
+      
+      // Ignore if it's ourselves (we are added via localState and updated via room-joined)
+      if (username === this.state.currentUser) {
+        return;
+      }
+
       const userId = data.userId ? data.userId.toString() : `guest_${Date.now()}`;
 
       if (!username) {
@@ -208,9 +214,9 @@ class WebRTCService {
       console.log('Received offer from:', data.from);
       try {
         // data.from is an object with { userId, userName }
-        const fromUserId = typeof data.from === 'string' ? data.from : data.from?.userId;
         const fromUserName = typeof data.from === 'string' ? data.from : data.from?.userName;
-        if (fromUserId && fromUserName) {
+        
+        if (fromUserName) {
           const offerObj = typeof data.offer === 'string' ? JSON.parse(data.offer) : data.offer;
           await this.handleOffer(fromUserName, offerObj);
         } else {
@@ -225,9 +231,9 @@ class WebRTCService {
       console.log('Received answer from:', data.from);
       try {
         // data.from is an object with { userId, userName }
-        const fromUserId = typeof data.from === 'string' ? data.from : data.from?.userId;
         const fromUserName = typeof data.from === 'string' ? data.from : data.from?.userName;
-        if (fromUserId && fromUserName) {
+        
+        if (fromUserName) {
           const answerObj = typeof data.answer === 'string' ? JSON.parse(data.answer) : data.answer;
           await this.handleAnswer(fromUserName, answerObj);
         } else {
@@ -242,9 +248,9 @@ class WebRTCService {
       console.log('Received ICE candidate from:', data.from);
       try {
         // data.from is an object with { userId, userName }
-        const fromUserId = typeof data.from === 'string' ? data.from : data.from?.userId;
         const fromUserName = typeof data.from === 'string' ? data.from : data.from?.userName;
-        if (fromUserId && fromUserName) {
+        
+        if (fromUserName) {
           const candidateObj = typeof data.candidate === 'string' ? JSON.parse(data.candidate) : data.candidate;
           await this.handleIceCandidate(fromUserName, candidateObj);
         } else {
@@ -258,10 +264,14 @@ class WebRTCService {
     // Media state changed: Server emits 'user-media-state'
     socketService.on('user-media-state', (data: any) => {
       const { userId, mediaState } = data;
-      // We need to find the username for this userId to update our state
-      const username = Object.keys(this.state.users).find(
-        uname => this.state.users[uname].id === userId.toString()
+      // Robust search: find by ID, or fallback to something else if needed
+      let username = Object.keys(this.state.users).find(
+        uname => this.state.users[uname].id === userId?.toString()
       );
+      
+      // If not found by ID, this might be an issue with guest IDs.
+      // But we should have unique IDs now.
+      
       if (username) {
         this.handleUserMediaStateChanged(username, mediaState.isVideoEnabled, mediaState.isAudioEnabled);
       }
@@ -288,9 +298,18 @@ class WebRTCService {
               username: participant.userName,
               id: participant.userId?.toString() || `remote_${Date.now()}`,
               isLocal: false,
-              isVideoEnabled: true,
-              isAudioEnabled: true,
+              isVideoEnabled: participant.mediaState?.isVideoEnabled ?? true,
+              isAudioEnabled: participant.mediaState?.isAudioEnabled ?? true,
             };
+          } else {
+            // Update our own ID from the server
+            console.log('Updating local user ID from server:', participant.userId);
+            if (this.state.currentUser) {
+              newUsers[this.state.currentUser] = {
+                ...newUsers[this.state.currentUser],
+                id: participant.userId?.toString()
+              };
+            }
           }
         }
         this.updateState({ users: newUsers });
@@ -361,11 +380,16 @@ class WebRTCService {
   private createPeerConnection(remoteUser: string): RTCPeerConnection {
     console.log('Creating peer connection for:', remoteUser);
     
-    const config = {
+    const config: RTCConfiguration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+      ],
+      bundlePolicy: 'max-bundle',
+      iceCandidatePoolSize: 10
     };
 
     const pc = new RTCPeerConnection(config);
@@ -385,17 +409,34 @@ class WebRTCService {
       console.log(`Received remote track (${event.track.kind}) from:`, remoteUser);
       
       this.updateState(prevState => {
+        // Ensure user exists in state
+        const users = { ...prevState.users };
+        if (!users[remoteUser]) {
+          console.log(`Adding missing user ${remoteUser} on track arrival`);
+          users[remoteUser] = {
+            username: remoteUser,
+            id: `id_${remoteUser}`,
+            isLocal: false,
+            isVideoEnabled: true,
+            isAudioEnabled: true
+          };
+        }
+
         const existingStream = prevState.remoteStreams[remoteUser];
         let remoteStream: MediaStream;
         
         if (existingStream) {
           existingStream.addTrack(event.track);
-          remoteStream = existingStream;
+          // Standard trick: create NEW MediaStream with same tracks to trigger React update
+          remoteStream = new MediaStream(existingStream.getTracks());
+          console.log(`Updated existing stream for ${remoteUser} with ${event.track.kind} track. New track count: ${remoteStream.getTracks().length}`);
         } else {
           remoteStream = event.streams[0] || new MediaStream([event.track]);
+          console.log(`Created new stream for ${remoteUser} with ${event.track.kind} track`);
         }
         
         return { 
+          users,
           remoteStreams: {
             ...prevState.remoteStreams,
             [remoteUser]: remoteStream
@@ -711,7 +752,9 @@ class WebRTCService {
       console.log(`Processing ${queue.length} queued ICE candidates for ${from}`);
       for (const candidate of queue) {
         try {
-          await peerConnection.addIceCandidate(candidate);
+          if (candidate && (candidate.candidate || candidate.sdpMid)) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          }
         } catch (e) {
           console.error(`Error adding queued ICE candidate for ${from}:`, e);
         }
@@ -744,7 +787,9 @@ class WebRTCService {
         console.log(`Processing ${queue.length} queued ICE candidates for ${from}`);
         for (const candidate of queue) {
           try {
-            await peerConnection.addIceCandidate(candidate);
+            if (candidate && (candidate.candidate || candidate.sdpMid)) {
+              await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            }
           } catch (e) {
             console.error(`Error adding queued ICE candidate for ${from}:`, e);
           }
@@ -765,7 +810,9 @@ class WebRTCService {
       // If remote description is already set, add candidate immediately
       if (peerConnection.remoteDescription) {
         try {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          if (candidate && (candidate.candidate || candidate.sdpMid)) {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+          }
         } catch (error) {
           console.error('Error adding ICE candidate from', from, ':', error);
         }
@@ -998,11 +1045,13 @@ class WebRTCService {
         });
 
         // Broadcast state change to other users
-        if (socketService.isSocketConnected()) {
+        if (socketService.isSocketConnected() && this.state.roomId) {
           socketService.emit('update-media-state', {
             roomId: this.state.roomId,
-            isVideoEnabled: enabled,
-            isAudioEnabled: this.state.users[this.state.currentUser]?.isAudioEnabled ?? true
+            mediaState: {
+              isVideoEnabled: enabled,
+              isAudioEnabled: this.state.users[this.state.currentUser]?.isAudioEnabled ?? true
+            }
           });
         }
       }
@@ -1036,11 +1085,13 @@ class WebRTCService {
         });
 
         // Broadcast state change to other users
-        if (socketService.isSocketConnected()) {
+        if (socketService.isSocketConnected() && this.state.roomId) {
           socketService.emit('update-media-state', {
             roomId: this.state.roomId,
-            isVideoEnabled: this.state.users[this.state.currentUser]?.isVideoEnabled ?? true,
-            isAudioEnabled: enabled
+            mediaState: {
+              isVideoEnabled: this.state.users[this.state.currentUser]?.isVideoEnabled ?? true,
+              isAudioEnabled: enabled
+            }
           });
         }
       }
@@ -1144,7 +1195,8 @@ class WebRTCService {
     return { ...this.state };
   }
 
-  private updateState(newState: Partial<CallState>): void {
+  private updateState(update: Partial<CallState> | ((prevState: CallState) => Partial<CallState>)): void {
+    const newState = typeof update === 'function' ? update(this.state) : update;
     this.state = { ...this.state, ...newState };
     if (this.stateChangeCallback) {
       this.stateChangeCallback({ ...this.state });
