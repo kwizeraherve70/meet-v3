@@ -28,18 +28,18 @@ export const aj = arcjet({
 /**
  * Auth Arcjet instance - Stricter limits for login/register
  * Prevents brute force attacks
- * Limit: 5 attempts per 15 minutes
+ * Limit: 50 attempts per 15 minutes
  */
 export const ajAuth = arcjet({
   key: process.env.ARCJET_KEY || '',
   characteristics: ['ip.src'],
   rules: [
-    // Auth-specific rate limit: 5 attempts per 15 minutes per IP
+    // Auth-specific rate limit: 50 attempts per 15 minutes per IP
     tokenBucket({
       mode: 'LIVE',
-      refillRate: 5,
+      refillRate: 50,
       interval: 900, // 15 minutes
-      capacity: 5,
+      capacity: 50,
     }),
   ],
 });
@@ -66,18 +66,18 @@ export const ajRoom = arcjet({
 /**
  * Chat Arcjet instance - Lenient limits for chat messages
  * Allows normal conversation while preventing spam
- * Limit: 50 messages per minute
+ * Limit: 200 messages per minute
  */
 export const ajChat = arcjet({
   key: process.env.ARCJET_KEY || '',
   characteristics: ['ip.src'],
   rules: [
-    // Chat: 50 messages per minute per IP
+    // Chat: 200 messages per minute per IP
     tokenBucket({
       mode: 'LIVE',
-      refillRate: 50,
+      refillRate: 200,
       interval: 60,
-      capacity: 50,
+      capacity: 200,
     }),
   ],
 });
