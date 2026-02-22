@@ -6,6 +6,7 @@ import {
   addSocketToRoom,
   removeSocketFromRoom,
   getSocketsInRoom,
+  getSocket,
   removeSocket,
   updateLastActivity,
 } from '../state/socket.state.js';
@@ -105,9 +106,10 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       // Get current room participants
       const roomSockets = getSocketsInRoom(roomId);
       const participants = roomSockets.map((s) => ({
-        userId: s.userId,
+        userId: s.userId || s.guestId,
         userName: s.userName,
         isHost: s.isHost,
+        mediaState: s.mediaState || { isVideoEnabled: true, isAudioEnabled: true }
       }));
 
       logger.info('RoomHandler', 'User joined room', {
@@ -128,7 +130,7 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       // Announce new user to others in room IMMEDIATELY (before sync-peers)
       // This ensures existing users know about the new participant right away
       socket.broadcast.to(`room-${roomId}`).emit('user-joined', {
-        userId: user.id,
+        userId: user.id || user.guestId,
         userName: user.name,
         isHost,
       });
@@ -336,8 +338,14 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
         mediaState,
       });
 
+      // Update state in memory
+      const state = getSocket(socket.id);
+      if (state) {
+        state.mediaState = mediaState;
+      }
+
       io.to(`room-${roomId}`).emit('user-media-state', {
-        userId: user.id,
+        userId: user.id || user.guestId,
         mediaState,
       });
     } catch (error) {
@@ -400,7 +408,7 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       } else {
         // Non-host user left
         io.to(`room-${roomId}`).emit('user-left', {
-          userId: user.id,
+          userId: user.id || user.guestId,
           userName: user.name,
         });
       }
