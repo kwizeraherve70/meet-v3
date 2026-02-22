@@ -18,86 +18,136 @@ interface ChatSidebarProps {
   onClose: () => void;
   roomId?: string;
   username?: string;
+  /** Numeric user ID of the current user (undefined for guests not yet known). */
+  currentUserId?: number | null;
+  /** Called whenever a new message arrives while the chat panel is closed. */
+  onUnreadMessage?: () => void;
 }
 
-const ChatSidebar = ({ isOpen, onClose, roomId = "", username = "Anonymous" }: ChatSidebarProps) => {
+const ChatSidebar = ({
+  isOpen,
+  onClose,
+  roomId = "",
+  username = "Anonymous",
+  currentUserId,
+  onUnreadMessage,
+}: ChatSidebarProps) => {
   const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [isConnected, setIsConnected] = useState(socketService.isSocketConnected());
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Keep a ref so event callbacks always see the current isOpen value
+  const isOpenRef = useRef(isOpen);
+
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  // Track socket connection status so the input reflects real-time availability
+  useEffect(() => {
+    // Poll every second — lightweight and avoids complex socket event wiring
+    const interval = setInterval(() => {
+      setIsConnected(socketService.isSocketConnected());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Auto scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Set up chat message listeners
+  // Set up socket listeners
   useEffect(() => {
-    const handleChatMessage = (data: any) => {
+    if (!roomId) return;
+
+    // ── Handle incoming messages (from server broadcast) ──────────────────────
+    const handleMessageReceived = (data: any) => {
       const newMsg: Message = {
         id: data.id?.toString() || Date.now().toString(),
         sender: data.userName || "Unknown",
         content: data.content || "",
-        timestamp: new Date(data.created_at || Date.now()).toLocaleTimeString([], { 
-          hour: '2-digit', 
-          minute: '2-digit' 
+        timestamp: new Date(data.timestamp || data.created_at || Date.now()).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
         }),
-        isMe: data.userName === username
+        // Use numeric userId for reliable self-identification
+        isMe:
+          currentUserId != null
+            ? data.userId === currentUserId
+            : data.userName === username,
       };
-      
-      setMessages(prev => [...prev, newMsg]);
+
+      setMessages((prev) => [...prev, newMsg]);
+
+      // Notify parent for unread badge when chat is closed
+      if (!isOpenRef.current && onUnreadMessage) {
+        onUnreadMessage();
+      }
     };
 
-    // Subscribe to message-received event
-    const unsubscribe = socketService.on('message-received', handleChatMessage);
+    // ── Handle chat history (loaded on open) ─────────────────────────────────
+    const handleMessageHistory = (data: any) => {
+      const historyMessages: Message[] = (data.messages || []).map((m: any) => ({
+        id: m.id?.toString() || Date.now().toString(),
+        sender: m.user?.name || m.guestName || "Unknown",
+        content: m.content || "",
+        timestamp: new Date(m.createdAt || m.created_at || Date.now()).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        isMe:
+          currentUserId != null
+            ? m.userId === currentUserId
+            : (m.user?.name || m.guestName) === username,
+      }));
+      setMessages(historyMessages);
+    };
 
-    // ✅ FIXED: Request chat history with delay to ensure socket is connected
-    if (roomId) {
-      // Wait 1 second for socket to connect
-      const timer = setTimeout(() => {
-        if (socketService.isSocketConnected()) {
-          socketService.requestChatHistory(Number(roomId), 50, 0);
-        } else {
-          console.warn('Socket not connected, chat history not requested');
-        }
-      }, 1000);
-
-      return () => {
-        clearTimeout(timer);
-        unsubscribe();
-      };
-    }
+    const unsubscribeReceived = socketService.on("message-received", handleMessageReceived);
+    const unsubscribeHistory = socketService.on("message-history", handleMessageHistory);
 
     return () => {
-      unsubscribe();
+      unsubscribeReceived();
+      unsubscribeHistory();
     };
-  }, [roomId, username]);
+  }, [roomId, username, currentUserId, onUnreadMessage]);
+
+  // Request chat history whenever the panel opens
+  useEffect(() => {
+    if (!isOpen || !roomId) return;
+
+    const timer = setTimeout(() => {
+      if (socketService.isSocketConnected()) {
+        socketService.requestChatHistory(Number(roomId), 50, 0);
+      } else {
+        console.warn("Socket not connected — chat history not requested");
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [isOpen, roomId]);
 
   if (!isOpen) return null;
 
   const handleSend = () => {
-    if (newMessage.trim() && roomId) {
-      // Send message using socket service
+    if (!newMessage.trim() || !roomId || isSending || !isConnected) return;
+
+    setIsSending(true);
+    try {
+      // No optimistic local add — the server broadcasts back to the sender too,
+      // so we rely on the single `message-received` event for consistency.
       socketService.sendMessage(Number(roomId), newMessage.trim());
-      
-      // Add to local messages immediately for instant feedback
-      const localMessage: Message = {
-        id: Date.now().toString(),
-        sender: username,
-        content: newMessage.trim(),
-        timestamp: new Date().toLocaleTimeString([], { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        }),
-        isMe: true
-      };
-      setMessages(prev => [...prev, localMessage]);
-      
       setNewMessage("");
+    } finally {
+      // Always re-enable sending so the input never stays locked
+      setTimeout(() => setIsSending(false), 300);
     }
   };
 
   return (
-    <div className="absolute right-0 top-0 bottom-0 w-80 glass-dark border-l border-border animate-slide-up z-10 flex flex-col">
+    <div className="absolute right-0 top-0 bottom-0 w-80 glass-dark border-l border-border animate-slide-up z-30 flex flex-col">
       <div className="flex flex-col h-full">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
@@ -152,17 +202,17 @@ const ChatSidebar = ({ isOpen, onClose, roomId = "", username = "Anonymous" }: C
         <div className="p-4 border-t border-border flex-shrink-0 space-y-2">
           <div className="flex gap-2">
             <Input
-              placeholder="Type a message..."
+              placeholder={isConnected ? "Type a message..." : "Connecting..."}
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-              disabled={!roomId}
+              disabled={!isConnected || isSending}
               className="bg-secondary border-0"
             />
             <Button
               size="icon"
               onClick={handleSend}
-              disabled={!newMessage.trim() || !roomId}
+              disabled={!newMessage.trim() || !isConnected || isSending}
               title="Send message (Enter)"
             >
               <Send className="w-4 h-4" />

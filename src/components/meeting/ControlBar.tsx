@@ -64,9 +64,9 @@ const ControlBar = ({
   const [isHandRaised, setIsHandRaised] = useState(false);
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-20 animate-slide-up">
+    <div className="absolute bottom-0 left-0 right-0 z-20 animate-slide-up pointer-events-none">
       <div className="flex items-center justify-center px-4 py-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 pointer-events-auto">
           {/* Audio control */}
           <Tooltip>
             <TooltipTrigger asChild>

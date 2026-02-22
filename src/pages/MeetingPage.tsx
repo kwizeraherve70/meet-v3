@@ -19,6 +19,7 @@ const MeetingRoom = () => {
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   // Get meeting preferences from localStorage
   const getMeetingPreferences = () => {
@@ -65,8 +66,10 @@ const MeetingRoom = () => {
 
   const handleToggleChat = () => {
     setIsChatOpen(!isChatOpen);
-    if (!isChatOpen && isParticipantsOpen) {
-      setIsParticipantsOpen(false);
+    if (!isChatOpen) {
+      // Opened — clear unread badge
+      setUnreadMessages(0);
+      if (isParticipantsOpen) setIsParticipantsOpen(false);
     }
   };
 
@@ -133,7 +136,7 @@ const MeetingRoom = () => {
         isParticipantsOpen={isParticipantsOpen}
         isChatOpen={isChatOpen}
         participantCount={participantCount}
-        unreadMessages={0}
+        unreadMessages={unreadMessages}
         isMuted={!isAudioEnabled}
         isVideoOn={isVideoEnabled}
         onToggleMute={() => toggleAudio(!isAudioEnabled)}
@@ -154,6 +157,8 @@ const MeetingRoom = () => {
         onClose={() => setIsChatOpen(false)}
         roomId={roomId || ""}
         username={username}
+        currentUserId={user?.id}
+        onUnreadMessage={() => setUnreadMessages((n) => n + 1)}
       />
       
       {/* Debug info for development */}
