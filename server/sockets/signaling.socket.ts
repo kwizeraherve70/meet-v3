@@ -39,24 +39,26 @@ export function registerSignalingHandlers(socket: Socket, io: SocketIOServer): v
       }
 
       // Find target user's socket in same room
-      // Support both userId and userName for robustness
+      // Support userId, userName, and guestId for robustness
       const roomSockets = getSocketsInRoom(fromSocketState.roomId);
       const targetSocket = roomSockets.find((s) => 
-        s.userId === targetUserId || s.userName === targetUserId
+        s.userId?.toString() === targetUserId?.toString() || 
+        s.userName === targetUserId || 
+        s.guestId === targetUserId
       );
 
       if (!targetSocket) {
         logger.warn('SignalingHandler', 'Target user not in room', {
-          fromUserId: user.id,
+          fromUserId: user.id || user.guestId,
           toUserId: targetUserId,
           roomId: fromSocketState.roomId,
-          availableSockets: roomSockets.map(s => ({ userId: s.userId, userName: s.userName })),
+          availableSockets: roomSockets.map(s => ({ userId: s.userId, userName: s.userName, guestId: s.guestId })),
         });
         return;
       }
 
       logger.debug('SignalingHandler', 'Forwarding offer', {
-        fromUserId: user.id,
+        fromUserId: user.id || user.guestId,
         toUserId: targetUserId,
         roomId: fromSocketState.roomId,
       });
@@ -64,7 +66,7 @@ export function registerSignalingHandlers(socket: Socket, io: SocketIOServer): v
       // Forward offer to target
       io.to(targetSocket.socketId).emit('offer', {
         from: {
-          userId: user.id,
+          userId: user.id || user.guestId,
           userName: user.name,
         },
         offer,
@@ -95,24 +97,26 @@ export function registerSignalingHandlers(socket: Socket, io: SocketIOServer): v
       }
 
       // Find target user's socket in same room
-      // Support both userId and userName for robustness
+      // Support userId, userName, and guestId for robustness
       const roomSockets = getSocketsInRoom(fromSocketState.roomId);
       const targetSocket = roomSockets.find((s) => 
-        s.userId === targetUserId || s.userName === targetUserId
+        s.userId?.toString() === targetUserId?.toString() || 
+        s.userName === targetUserId || 
+        s.guestId === targetUserId
       );
 
       if (!targetSocket) {
         logger.warn('SignalingHandler', 'Target user not in room', {
-          fromUserId: user.id,
+          fromUserId: user.id || user.guestId,
           toUserId: targetUserId,
           roomId: fromSocketState.roomId,
-          availableSockets: roomSockets.map(s => ({ userId: s.userId, userName: s.userName })),
+          availableSockets: roomSockets.map(s => ({ userId: s.userId, userName: s.userName, guestId: s.guestId })),
         });
         return;
       }
 
       logger.debug('SignalingHandler', 'Forwarding answer', {
-        fromUserId: user.id,
+        fromUserId: user.id || user.guestId,
         toUserId: targetUserId,
         roomId: fromSocketState.roomId,
       });
@@ -120,7 +124,7 @@ export function registerSignalingHandlers(socket: Socket, io: SocketIOServer): v
       // Forward answer to target
       io.to(targetSocket.socketId).emit('answer', {
         from: {
-          userId: user.id,
+          userId: user.id || user.guestId,
           userName: user.name,
         },
         answer,
@@ -152,10 +156,11 @@ export function registerSignalingHandlers(socket: Socket, io: SocketIOServer): v
       }
 
       // Find target user's socket in same room
-      // Support both userId and userName for robustness
       const roomSockets = getSocketsInRoom(fromSocketState.roomId);
       const targetSocket = roomSockets.find((s) => 
-        s.userId === targetUserId || s.userName === targetUserId
+        s.userId?.toString() === targetUserId?.toString() || 
+        s.userName === targetUserId || 
+        s.guestId === targetUserId
       );
 
       if (!targetSocket) {
@@ -165,7 +170,7 @@ export function registerSignalingHandlers(socket: Socket, io: SocketIOServer): v
       // Forward ICE candidate to target
       io.to(targetSocket.socketId).emit('icecandidate', {
         from: {
-          userId: user.id,
+          userId: user.id || user.guestId,
           userName: user.name,
         },
         candidate,
