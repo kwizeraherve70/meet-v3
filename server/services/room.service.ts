@@ -351,11 +351,20 @@ export class RoomService {
    * Clean up and end a room (called when last participant leaves or host leaves)
    * @param roomId Room database ID
    */
-  async cleanupRoom(roomId: number): Promise<void> {
+  async cleanupRoom(roomId: number | string): Promise<void> {
+    // Resolve numeric ID if it's a string code
+    let numericId: number;
+    if (typeof roomId === 'string' && isNaN(Number(roomId))) {
+      const room = await this.getRoomByCode(roomId);
+      numericId = room.id;
+    } else {
+      numericId = Number(roomId);
+    }
+
     // Mark all participants as left if not already
     await prisma.participant.updateMany({
       where: {
-        roomId,
+        roomId: numericId,
         leftAt: null,
       },
       data: {
@@ -364,7 +373,7 @@ export class RoomService {
     });
 
     // End the room
-    await this.endRoom(roomId);
+    await this.endRoom(numericId);
   }
 
   /**

@@ -11,7 +11,7 @@ export interface SocketState {
   guestId: string | null;
   userName: string | null;
   email: string | null;
-  roomId: number | null;
+  roomId: number | string | null;
   isHost: boolean;
   isGuest: boolean;
   connectedAt: Date;
@@ -34,13 +34,13 @@ const sockets: Map<string, SocketState> = new Map();
  * User ID to socketIds mapping (supports multi-tab)
  * Key: userId, Value: array of socketIds
  */
-const userToSockets: Map<number, string[]> = new Map();
+const userToSockets: Map<number | string, string[]> = new Map();
 
 /**
  * Room to socketIds mapping
  * Key: roomId, Value: array of socketIds
  */
-const roomToSockets: Map<number, string[]> = new Map();
+const roomToSockets: Map<number | string, string[]> = new Map();
 
 /**
  * Register a new socket connection (before authentication)
@@ -71,9 +71,11 @@ export function registerSocket(socketId: string): SocketState {
  */
 export function authenticateSocket(
   socketId: string,
-  userId: number,
+  userId: number | null,
   userName: string,
-  email: string
+  email: string | null,
+  isGuest = false,
+  guestId: string | null = null
 ): void {
   const state = sockets.get(socketId);
   if (!state) {
@@ -82,19 +84,23 @@ export function authenticateSocket(
   }
 
   state.userId = userId;
+  state.guestId = guestId;
   state.userName = userName;
   state.email = email;
   state.isAuthenticated = true;
-  state.isGuest = false;
+  state.isGuest = isGuest;
   state.lastActivity = new Date();
 
   // Map user to socket (for multi-tab support)
-  if (!userToSockets.has(userId)) {
-    userToSockets.set(userId, []);
+  const identifier = userId || guestId;
+  if (identifier) {
+    if (!userToSockets.has(identifier)) {
+      userToSockets.set(identifier, []);
+    }
+    userToSockets.get(identifier)!.push(socketId);
   }
-  userToSockets.get(userId)!.push(socketId);
 
-  logger.info('SocketState', 'Socket authenticated', { socketId, userId, userName });
+  logger.info('SocketState', 'Socket authenticated', { socketId, userId, guestId, userName });
 }
 
 /**
@@ -123,7 +129,11 @@ export function authenticateGuestSocket(
 /**
  * Add socket to room
  */
-export function addSocketToRoom(socketId: string, roomId: number, isHost: boolean = false): void {
+export function addSocketToRoom(
+  socketId: string,
+  roomId: number | string,
+  isHost: boolean = false
+): void {
   const state = sockets.get(socketId);
   if (!state) {
     logger.warn('SocketState', 'Socket not found for room join', { socketId, roomId });
@@ -132,7 +142,7 @@ export function addSocketToRoom(socketId: string, roomId: number, isHost: boolea
 
   // Remove from previous room if any
   if (state.roomId !== null) {
-    removeSocketFromRoom(socketId);
+    removeSocketFromRoom(socketId, state.roomId);
   }
 
   state.roomId = roomId;
@@ -152,13 +162,18 @@ export function addSocketToRoom(socketId: string, roomId: number, isHost: boolea
 /**
  * Remove socket from room
  */
-export function removeSocketFromRoom(socketId: string): void {
+export function removeSocketFromRoom(socketId: string, roomId: number | string): void {
   const state = sockets.get(socketId);
   if (!state || state.roomId === null) {
     return;
   }
 
-  const roomId = state.roomId;
+  // Ensure the socket is actually in the room we're trying to remove it from
+  if (state.roomId !== roomId) {
+    logger.warn('SocketState', 'Socket not in specified room for removal', { socketId, currentRoomId: state.roomId, targetRoomId: roomId });
+    return;
+  }
+
   const sockets_in_room = roomToSockets.get(roomId);
   if (sockets_in_room) {
     const index = sockets_in_room.indexOf(socketId);
@@ -188,7 +203,7 @@ export function getSocket(socketId: string): SocketState | undefined {
 /**
  * Get all sockets for a user
  */
-export function getSocketsByUserId(userId: number): SocketState[] {
+export function getSocketsByUserId(userId: number | string): SocketState[] {
   const socketIds = userToSockets.get(userId) || [];
   return socketIds.map(sid => sockets.get(sid)).filter((s) => s !== undefined) as SocketState[];
 }
@@ -204,7 +219,7 @@ export function getUserIdBySocket(socketId: string): number | null {
 /**
  * Get all sockets in a specific room
  */
-export function getSocketsInRoom(roomId: number): SocketState[] {
+export function getSocketsInRoom(roomId: number | string): SocketState[] {
   const socketIds = roomToSockets.get(roomId) || [];
   return socketIds.map(sid => sockets.get(sid)).filter((s) => s !== undefined) as SocketState[];
 }
@@ -233,8 +248,8 @@ export function removeSocket(socketId: string): SocketState | undefined {
   }
 
   // Remove from room mapping
-  if (state.roomId !== null) {
-    removeSocketFromRoom(socketId);
+  if (state.roomId) {
+    removeSocketFromRoom(socketId, state.roomId);
   }
 
   sockets.delete(socketId);

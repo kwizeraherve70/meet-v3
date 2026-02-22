@@ -5,7 +5,7 @@ import { socketService } from '@/lib/socket';
 interface WebRTCContextType {
   state: CallState;
   webrtcService: WebRTCService | null;
-  joinUser: (username: string) => Promise<void>;
+  joinUser: (username: string, roomId?: string) => Promise<void>;
   startCall: (targetUser: string) => Promise<void>;
   endCall: () => void;
   toggleVideo: (enabled: boolean) => void;
@@ -70,7 +70,7 @@ export const WebRTCProvider: React.FC<{ children: React.ReactNode; roomId?: stri
     };
   }, []); // Empty dependency array to run only once
 
-  const joinUser = async (username: string): Promise<void> => {
+  const joinUser = async (username: string, roomId?: string): Promise<void> => {
     // ✅ ADDED: Initialize socket connection BEFORE joining room
     try {
       if (!socketService.isSocketConnected()) {

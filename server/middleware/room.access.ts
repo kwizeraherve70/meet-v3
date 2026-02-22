@@ -13,7 +13,7 @@ import { logger } from '../lib/logger.js';
  */
 export async function validateRoomAccess(
   socket: Socket,
-  roomId: number,
+  roomId: number | string,
   roomCode?: string
 ): Promise<{ valid: boolean; error?: string }> {
   try {
@@ -27,9 +27,14 @@ export async function validateRoomAccess(
       return { valid: false, error: 'User not authenticated' };
     }
 
+    // Determine query condition based on roomId type
+    const whereCondition = typeof roomId === 'number' || !isNaN(Number(roomId)) 
+      ? { id: Number(roomId) } 
+      : { roomCode: String(roomId) };
+
     // Check if room exists
     const room = await prisma.room.findUnique({
-      where: { id: roomId },
+      where: whereCondition,
       select: {
         id: true,
         roomCode: true,
@@ -41,8 +46,9 @@ export async function validateRoomAccess(
 
     if (!room) {
       logger.warn('RoomAccess', 'Room not found', {
-        userId: user.id,
+        userId: user.id || user.guestId,
         roomId,
+        whereCondition
       });
       return { valid: false, error: 'Room not found' };
     }
@@ -50,7 +56,7 @@ export async function validateRoomAccess(
     // Check if room is active
     if (!room.isActive) {
       logger.warn('RoomAccess', 'Room is not active', {
-        userId: user.id,
+        userId: user.id || user.guestId,
         roomId,
       });
       return { valid: false, error: 'Room is not active' };
@@ -59,7 +65,7 @@ export async function validateRoomAccess(
     // Verify room code matches if provided
     if (roomCode && room.roomCode !== roomCode) {
       logger.warn('RoomAccess', 'Invalid room code', {
-        userId: user.id,
+        userId: user.id || user.guestId,
         roomId,
         providedCode: roomCode,
         actualCode: room.roomCode,
@@ -68,7 +74,7 @@ export async function validateRoomAccess(
     }
 
     logger.info('RoomAccess', 'Room access validated', {
-      userId: user.id,
+      userId: user.id || user.guestId,
       userName: user.name,
       roomId,
       roomCode: room.roomCode,
@@ -85,10 +91,14 @@ export async function validateRoomAccess(
   }
 }
 
-export async function getRoomInfo(roomId: number) {
+export async function getRoomInfo(roomId: number | string) {
   try {
+    const whereCondition = typeof roomId === 'number' || !isNaN(Number(roomId)) 
+      ? { id: Number(roomId) } 
+      : { roomCode: String(roomId) };
+
     const room = await prisma.room.findUnique({
-      where: { id: roomId },
+      where: whereCondition,
       select: {
         id: true,
         roomCode: true,
@@ -119,10 +129,16 @@ export async function getRoomInfo(roomId: number) {
 /**
  * Check if user is room host
  */
-export async function isRoomHost(roomId: number, userId: number): Promise<boolean> {
+export async function isRoomHost(roomId: number | string, userId: number | null): Promise<boolean> {
+  if (!userId) return false;
+
   try {
+    const whereCondition = typeof roomId === 'number' || !isNaN(Number(roomId)) 
+      ? { id: Number(roomId) } 
+      : { roomCode: String(roomId) };
+
     const room = await prisma.room.findUnique({
-      where: { id: roomId },
+      where: whereCondition,
       select: { createdById: true },
     });
 

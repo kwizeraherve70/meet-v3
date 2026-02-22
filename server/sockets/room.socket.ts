@@ -80,9 +80,11 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       }
 
       // Try soft reconnect first (if user was just disconnected)
-      const isReconnect = hasPendingReconnection(user.id, roomId);
-      if (isReconnect) {
-        const reconnected = attemptReconnect(socket, user.id, roomId, user.name);
+      const identifier = user.id || user.guestId;
+      const isReconnect = identifier ? hasPendingReconnection(identifier, roomId) : false;
+      
+      if (isReconnect && identifier) {
+        const reconnected = attemptReconnect(socket, identifier, roomId, user.name);
         if (reconnected) {
           logger.info('RoomHandler', 'User soft-reconnected to room', {
             userId: user.id,
@@ -369,7 +371,7 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       if (!socketState) return;
 
       const wasHost = socketState.isHost;
-      removeSocketFromRoom(socket.id);
+      removeSocketFromRoom(socket.id, roomId);
 
       // If host left, handle room closure or host promotion
       if (wasHost) {
@@ -405,13 +407,13 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
             roomId,
           });
         }
-      } else {
-        // Non-host user left
-        io.to(`room-${roomId}`).emit('user-left', {
-          userId: user.id || user.guestId,
-          userName: user.name,
-        });
       }
+
+      // ALWAYS emit user-left when someone leaves, regardless of host status
+      io.to(`room-${roomId}`).emit('user-left', {
+        userId: user.id || user.guestId,
+        userName: user.name,
+      });
 
       socket.leave(`room-${roomId}`);
 

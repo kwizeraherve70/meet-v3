@@ -43,8 +43,8 @@ const MeetingRoom = () => {
       return;
     }
 
-    if (!hasJoined) {
-      joinUser(username)
+    if (!hasJoined && roomId) {
+      joinUser(username, roomId)
         .then(() => {
           setHasJoined(true);
           // Media preferences are already applied during joinUser

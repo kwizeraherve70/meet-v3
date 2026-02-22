@@ -14,10 +14,10 @@ import {
  */
 
 interface PendingReconnection {
-  userId: number;
+  userId: number | string;
   userName: string;
-  email: string;
-  roomId: number;
+  email: string | null;
+  roomId: number | string;
   disconnectedAt: Date;
   timeoutId: NodeJS.Timeout;
 }
@@ -33,10 +33,10 @@ const RECONNECT_GRACE_PERIOD = 30 * 1000; // 30 seconds
  * Called when a user in a room disconnects
  */
 export function markForReconnect(
-  userId: number,
+  userId: number | string,
   userName: string,
-  email: string,
-  roomId: number,
+  email: string | null,
+  roomId: number | string,
   io: SocketIOServer
 ): void {
   const key = `${roomId}:${userId}`;
@@ -83,8 +83,8 @@ export function markForReconnect(
  */
 export function attemptReconnect(
   socket: Socket,
-  userId: number,
-  roomId: number,
+  userId: number | string,
+  roomId: number | string,
   userName: string
 ): boolean {
   const key = `${roomId}:${userId}`;
@@ -136,7 +136,7 @@ export function attemptReconnect(
  */
 function handleReconnectTimeout(
   key: string,
-  roomId: number,
+  roomId: number | string,
   io: SocketIOServer
 ): void {
   const pending = pendingReconnections.get(key);
@@ -160,7 +160,7 @@ function handleReconnectTimeout(
 /**
  * Check if user has a pending reconnection
  */
-export function hasPendingReconnection(userId: number, roomId: number): boolean {
+export function hasPendingReconnection(userId: number | string, roomId: number | string): boolean {
   const key = `${roomId}:${userId}`;
   return pendingReconnections.has(key);
 }
@@ -168,7 +168,7 @@ export function hasPendingReconnection(userId: number, roomId: number): boolean 
 /**
  * Get pending reconnection info
  */
-export function getPendingReconnection(userId: number, roomId: number) {
+export function getPendingReconnection(userId: number | string, roomId: number | string) {
   const key = `${roomId}:${userId}`;
   return pendingReconnections.get(key);
 }

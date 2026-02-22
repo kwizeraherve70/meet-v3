@@ -994,13 +994,16 @@ class WebRTCService {
     // Close all peer connections
     this.peerConnections.forEach((pc, username) => {
       pc.close();
-      if (socketService.isSocketConnected() && this.state.roomId) {
-        socketService.emit('leave-room', {
-          roomId: this.state.roomId
-        });
-      }
     });
     this.peerConnections.clear();
+
+    // Notify server we are leaving the room
+    if (socketService.isSocketConnected() && this.state.roomId) {
+      console.log('Emitting leave-room for:', this.state.roomId);
+      socketService.emit('leave-room', {
+        roomId: this.state.roomId
+      });
+    }
 
     // Stop local stream
     if (this.localStream) {
