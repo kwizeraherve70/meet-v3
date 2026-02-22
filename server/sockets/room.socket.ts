@@ -164,7 +164,7 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
    * Sent by: Client when joining room or scrolling up
    * Returns: Last N messages from room
    */
-  socket.on('request-message-history', async (data: any) => {
+  socket.on('request-chat-history', async (data: any) => {
     try {
       const { roomId, limit = 20 } = data;
       updateLastActivity(socket.id);
