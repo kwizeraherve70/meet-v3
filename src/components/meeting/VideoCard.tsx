@@ -10,6 +10,7 @@ interface VideoCardProps {
   avatarColor?: string;
   stream?: MediaStream | null;
   isLocal?: boolean;
+  connectionState?: string;
 }
 
 const VideoCard = ({
@@ -21,6 +22,7 @@ const VideoCard = ({
   avatarColor = "bg-primary",
   stream = null,
   isLocal = false,
+  connectionState = "connected",
 }: VideoCardProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -40,8 +42,8 @@ const VideoCard = ({
 
   return (
     <div
-      className={`video-card group transition-all duration-300 relative rounded-lg overflow-hidden bg-gradient-to-br from-card to-video-bg aspect-video ${
-        isSpeaking ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : "ring-1 ring-border"
+      className={`video-card group w-full transition-all duration-500 ease-out relative rounded-2xl overflow-hidden bg-gradient-to-br from-card to-video-bg aspect-video shadow-xl hover:shadow-2xl hover:scale-[1.02] ${
+        isSpeaking ? "ring-2 ring-primary ring-offset-4 ring-offset-background" : "border border-border/50"
       }`}
     >
       {hasVideo ? (
@@ -86,22 +88,29 @@ const VideoCard = ({
       </div>
 
       {/* Name tag and media status */}
-      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3 flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="truncate text-sm font-medium text-white">{name}</span>
-          {isMuted ? (
-            <MicOff className="w-4 h-4 text-red-400 flex-shrink-0" title="Muted" />
-          ) : (
-            <Mic className="w-4 h-4 text-green-400 flex-shrink-0" title="Audio on" />
-          )}
-          {!hasVideo && (
-            <VideoOff className="w-4 h-4 text-red-400 flex-shrink-0" title="Video off" />
-          )}
+      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none">
+        <div className="flex items-center gap-2 p-1.5 px-3 rounded-full glass-dark pointer-events-auto backdrop-blur-md border border-white/10 shadow-lg max-w-[80%]">
+          <span className="truncate text-sm font-semibold text-white tracking-tight">{name}</span>
+          <div className="flex items-center gap-2 ml-1">
+            {isMuted ? (
+              <MicOff className="w-4 h-4 text-red-400/90 flex-shrink-0" />
+            ) : (
+              <Mic className="w-4 h-4 text-green-400/90 flex-shrink-0" />
+            )}
+            {!hasVideo && (
+              <VideoOff className="w-4 h-4 text-red-500/90 flex-shrink-0" />
+            )}
+          </div>
         </div>
+        
         {isPinned && (
-          <Pin className="w-4 h-4 text-primary flex-shrink-0" title="Pinned" />
+          <div className="p-2 rounded-full glass-dark border border-white/10 pointer-events-auto">
+            <Pin className="w-4 h-4 text-primary" />
+          </div>
         )}
       </div>
+
+
     </div>
   );
 };
