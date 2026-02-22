@@ -24,42 +24,48 @@ const VideoGrid = ({
   const userArray = Object.values(users);
   const participantCount = userArray.length;
 
-  // Ensure current user is included even if not in users object yet
+  // Ensure current user is included safely
   const participants = [];
+  const processedUsernames = new Set<string>();
   
-  // Add current user if we have their info
-  if (currentUser && localStream) {
-    const currentUserData = users[currentUser];
+  // 1. Add current user
+  if (currentUser) {
+    const currentUserData = users?.[currentUser];
     participants.push({
-      id: currentUser,
-      name: currentUser,
+      id: "local-user",
+      name: `${currentUser} (You)`,
       isMuted: !isAudioEnabled,
       isVideoOn: isVideoEnabled,
       isSpeaking: false,
       avatarColor: "bg-blue-600",
       isLocal: true,
-      stream: localStream,
+      stream: localStream || null,
       connectionState: currentUserData?.connectionState || 'connected'
     });
+    processedUsernames.add(currentUser);
   }
 
-  // Add remote users
-  userArray.forEach(user => {
-    if (user.username !== currentUser) {
-      const stream = remoteStreams[user.username];
-      participants.push({
-        id: user.username,
-        name: user.username,
-        isMuted: !(user.isAudioEnabled ?? true),
-        isVideoOn: user.isVideoEnabled ?? true,
-        isSpeaking: false,
-        avatarColor: "bg-green-600",
-        isLocal: false,
-        stream: stream || null,
-        connectionState: user.connectionState || 'connecting'
-      });
-    }
-  });
+  // 2. Add all other users from the users map safely
+  if (users) {
+    Object.keys(users).forEach(uname => {
+      if (!processedUsernames.has(uname)) {
+        const user = users[uname];
+        const stream = remoteStreams?.[uname];
+        participants.push({
+          id: uname,
+          name: uname,
+          isMuted: !(user?.isAudioEnabled ?? true),
+          isVideoOn: user?.isVideoEnabled ?? true,
+          isSpeaking: false,
+          avatarColor: "bg-green-600",
+          isLocal: false,
+          stream: stream || null,
+          connectionState: user?.connectionState || 'connecting'
+        });
+        processedUsernames.add(uname);
+      }
+    });
+  }
 
   // Fallback for no participants - show waiting message
   if (participants.length === 0) {
@@ -76,30 +82,31 @@ const VideoGrid = ({
     });
   }
 
-  const gridCols = participants.length <= 2 
-    ? "grid-cols-1 md:grid-cols-2" 
-    : participants.length <= 4 
-    ? "grid-cols-2" 
-    : "grid-cols-2 lg:grid-cols-3";
+  const getGridConfig = (count: number) => {
+    if (count === 1) return "grid-cols-1 max-w-4xl";
+    if (count === 2) return "grid-cols-1 md:grid-cols-2 max-w-6xl";
+    if (count <= 4) return "grid-cols-2 max-w-6xl";
+    return "grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 max-w-7xl";
+  };
+
+  const gridClass = getGridConfig(participants.length);
 
   return (
-    <div 
-      className={`flex-1 p-4 pt-20 pb-24 overflow-auto transition-all duration-300 ${
-        isSidebarOpen ? "pr-[340px]" : ""
-      }`}
-    >
-      <div className={`grid ${gridCols} gap-3 h-full auto-rows-fr max-w-6xl mx-auto`}>
+    <div className={`flex-grow w-full h-full overflow-y-auto p-4 pt-28 pb-32 ${isSidebarOpen ? "lg:pr-[340px]" : ""}`}>
+      <div className={`grid ${gridClass} gap-6 w-full max-w-[1400px] mx-auto`}>
         {participants.map((participant) => (
-          <VideoCard
-            key={participant.id}
-            name={participant.name}
-            isMuted={participant.isMuted}
-            isVideoOn={participant.isVideoOn}
-            isSpeaking={participant.isSpeaking}
-            avatarColor={participant.avatarColor}
-            stream={participant.stream}
-            isLocal={participant.isLocal}
-          />
+          <div key={participant.id} className="w-full animate-fade-in">
+            <VideoCard
+              name={participant.name}
+              isMuted={participant.isMuted}
+              isVideoOn={participant.isVideoOn}
+              isSpeaking={participant.isSpeaking}
+              avatarColor={participant.avatarColor}
+              stream={participant.stream}
+              isLocal={participant.isLocal}
+              connectionState={participant.connectionState}
+            />
+          </div>
         ))}
       </div>
     </div>
