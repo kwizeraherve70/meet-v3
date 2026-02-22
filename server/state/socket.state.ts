@@ -18,6 +18,10 @@ export interface SocketState {
   joinedRoomAt: Date | null;
   lastActivity: Date;
   isAuthenticated: boolean;
+  mediaState?: {
+    isVideoEnabled: boolean;
+    isAudioEnabled: boolean;
+  };
 }
 
 /**
