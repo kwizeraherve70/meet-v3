@@ -36,6 +36,7 @@ interface ControlBarProps {
   onToggleChat: () => void;
   onLeaveMeeting?: () => void;
   onEmojiReaction?: (emoji: string) => void;
+  onRaiseHand?: (isRaised: boolean) => void;
   isParticipantsOpen: boolean;
   isChatOpen: boolean;
   participantCount: number;
@@ -53,6 +54,7 @@ const ControlBar = ({
   onToggleChat,
   onLeaveMeeting,
   onEmojiReaction,
+  onRaiseHand,
   isParticipantsOpen,
   isChatOpen,
   participantCount,
@@ -65,6 +67,12 @@ const ControlBar = ({
   onToggleScreenShare,
 }: ControlBarProps) => {
   const [isHandRaised, setIsHandRaised] = useState(false);
+
+  const handleRaiseHand = () => {
+    const newState = !isHandRaised;
+    setIsHandRaised(newState);
+    onRaiseHand?.(newState);
+  };
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-20 animate-slide-up pointer-events-none">
@@ -126,7 +134,7 @@ const ControlBar = ({
               <Button
                 variant={isHandRaised ? "controlPrimary" : "control"}
                 size="control"
-                onClick={() => setIsHandRaised(!isHandRaised)}
+                onClick={handleRaiseHand}
               >
                 <Hand className="w-5 h-5" />
               </Button>

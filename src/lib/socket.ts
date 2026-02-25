@@ -30,6 +30,10 @@ export interface SocketEvents {
   'send-emoji-reaction': { roomId: number; emoji: string };
   'emoji-reaction-received': { emoji: string; senderName: string; id: string; timestamp: number };
   
+  // Raise hand
+  'raise-hand': { roomId: number };
+  'hand-raised': { senderName: string; id: string; timestamp: number };
+  
   // Server events
   'user-joined': { userId: string | number; userName: string; isHost?: boolean };
   'user-left': { userId: string | number; userName: string };
