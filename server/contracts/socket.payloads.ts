@@ -117,6 +117,22 @@ export interface HandRaisedPayload {
 }
 
 // ============================================================================
+// EMOJI REACTION PAYLOADS
+// ============================================================================
+
+export interface SendEmojiReactionPayload {
+  roomId: string;
+  emoji: string;
+}
+
+export interface EmojiReactionReceivedPayload {
+  emoji: string;
+  senderName: string;
+  id: string; // Unique reaction ID for cleanup
+  timestamp: number;
+}
+
+// ============================================================================
 // ERROR PAYLOADS
 // ============================================================================
 

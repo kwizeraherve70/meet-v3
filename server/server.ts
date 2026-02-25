@@ -1,13 +1,19 @@
 import { createServer, Server as HTTPServer } from 'http';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import createApp from './app.js';
 import initializeSocketIO from './sockets/index.js';
 import { initializeUpstashRedis, disconnectUpstash } from './config/upstash.config.js';
 // ✅ ADD THIS IMPORT
 import { cleanupCache, verifyCacheHealth } from './utils/cleanup-cache.js';
 
+// Get the directory of the current file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Load environment variables before anything else
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 // Setup global error handler
 process.on('uncaughtException', (error) => {

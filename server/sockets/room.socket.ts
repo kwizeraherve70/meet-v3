@@ -490,6 +490,79 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
   });
 
   /**
+   * EVENT: Send emoji reaction
+   * Triggered: When user sends an emoji reaction
+   * Broadcasts: To all users in the room
+   */
+  socket.on('send-emoji-reaction', async (data: any) => {
+    try {
+      const { emojiRateLimiter } = await import('../lib/emoji-rate-limiter.js');
+      const { randomUUID } = await import('crypto');
+
+      const roomId = typeof data.roomId === 'string'
+        ? parseInt(data.roomId, 10)
+        : data.roomId;
+
+      const emoji = data.emoji;
+
+      // Validate room ID and emoji
+      if (!roomId || isNaN(roomId) || !emoji || typeof emoji !== 'string') {
+        socket.emit('error', {
+          type: 'INVALID_EMOJI_DATA',
+          message: 'Invalid room ID or emoji',
+        });
+        return;
+      }
+
+      // Check if user is in this room
+      const roomSockets = getSocketsInRoom(roomId);
+      const isUserInRoom = roomSockets.some((s) => s.socketId === socket.id);
+
+      if (!isUserInRoom) {
+        socket.emit('error', {
+          type: 'NOT_IN_ROOM',
+          message: 'You are not in this room',
+        });
+        return;
+      }
+
+      // Rate limit check (max 3 emojis per 10 seconds)
+      const userId = String(user.id || user.guestId);
+      if (!emojiRateLimiter.canReact(userId, roomId)) {
+        socket.emit('error', {
+          type: 'EMOJI_RATE_LIMITED',
+          message: 'Too many emoji reactions. Please slow down.',
+        });
+        return;
+      }
+
+      // Broadcast emoji reaction to room
+      const reactionId = randomUUID();
+      io.to(`room-${roomId}`).emit('emoji-reaction-received', {
+        emoji,
+        senderName: user.name,
+        id: reactionId,
+        timestamp: Date.now(),
+      });
+
+      logger.debug('RoomHandler', 'Emoji reaction sent', {
+        emoji,
+        senderName: user.name,
+        roomId,
+      });
+    } catch (error) {
+      logger.error('RoomHandler', 'Error handling emoji reaction', {
+        socketId: socket.id,
+        error: (error as Error).message,
+      });
+      socket.emit('error', {
+        type: 'EMOJI_SEND_FAILED',
+        message: 'Failed to send emoji reaction',
+      });
+    }
+  });
+
+  /**
    * EVENT: Socket error
    * Triggered: When socket encounters an error
    */
