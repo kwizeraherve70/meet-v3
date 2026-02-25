@@ -8,7 +8,9 @@ import VideoGrid from "@/components/meeting/VideoGrid";
 import ControlBar from "@/components/meeting/ControlBar";
 import ParticipantsSidebar from "@/components/meeting/ParticipantsSidebar";
 import ChatSidebar from "@/components/meeting/ChatSidebar";
+import FloatingEmojis, { FloatingReaction } from "@/components/meeting/FloatingEmojis";
 import DebugInfo from "@/components/DebugInfo";
+import { socketService } from "@/lib/socket";
 
 const MeetingRoom = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -20,6 +22,7 @@ const MeetingRoom = () => {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
 
   // Get meeting preferences from localStorage
   const getMeetingPreferences = () => {
@@ -56,6 +59,30 @@ const MeetingRoom = () => {
         });
     }
   }, [username, roomId, hasJoined, joinUser, navigate]);
+
+  // Setup socket listener for emoji reactions
+  useEffect(() => {
+    if (!hasJoined || !roomId) return;
+
+    const handleEmojiReaction = (data: any) => {
+      const newReaction: FloatingReaction = {
+        id: data.id,
+        emoji: data.emoji,
+        senderName: data.senderName,
+        createdAt: data.timestamp,
+      };
+      
+      setFloatingReactions((prev) => [...prev, newReaction]);
+    };
+
+    // Register listener and get unsubscribe function
+    const unsubscribe = socketService.on('emoji-reaction-received', handleEmojiReaction);
+
+    // Cleanup listener
+    return () => {
+      unsubscribe();
+    };
+  }, [hasJoined, roomId]);
 
   const handleToggleParticipants = () => {
     setIsParticipantsOpen(!isParticipantsOpen);
@@ -101,6 +128,20 @@ const MeetingRoom = () => {
     }
   };
 
+  const handleEmojiReaction = (emoji: string) => {
+    if (!roomId) return;
+
+    // Emit emoji reaction to server
+    socketService.emit('send-emoji-reaction', {
+      roomId: parseInt(roomId),
+      emoji,
+    });
+  };
+
+  const handleRemoveFloatingReaction = (reactionId: string) => {
+    setFloatingReactions((prev) => prev.filter((r) => r.id !== reactionId));
+  };
+
   const isSidebarOpen = isParticipantsOpen || isChatOpen;
   const participantCount = Object.keys(state.users).length;
 
@@ -133,6 +174,7 @@ const MeetingRoom = () => {
         onToggleParticipants={handleToggleParticipants}
         onToggleChat={handleToggleChat}
         onLeaveMeeting={handleLeaveMeeting}
+        onEmojiReaction={handleEmojiReaction}
         isParticipantsOpen={isParticipantsOpen}
         isChatOpen={isChatOpen}
         participantCount={participantCount}
@@ -143,6 +185,11 @@ const MeetingRoom = () => {
         onToggleVideo={() => toggleVideo(!isVideoEnabled)}
         isScreenSharing={state.isScreenSharing}
         onToggleScreenShare={handleToggleScreenShare}
+      />
+
+      <FloatingEmojis 
+        reactions={floatingReactions}
+        onRemoveReaction={handleRemoveFloatingReaction}
       />
 
       <ParticipantsSidebar

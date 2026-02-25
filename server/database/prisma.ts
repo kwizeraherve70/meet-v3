@@ -1,6 +1,34 @@
 import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the directory of the current file
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load .env file with explicit path
+const envPath = path.resolve(__dirname, '../../.env');
+const envResult = dotenv.config({ path: envPath });
+
+console.log('[PRISMA] ENV PATH:', envPath);
+console.log('[PRISMA] DATABASE_URL from env:', process.env.DATABASE_URL ? '✓ Set' : '✗ NOT SET');
+if (envResult.error) {
+  console.error('[PRISMA] Error loading .env:', envResult.error);
+} else {
+  console.log('[PRISMA] .env loaded successfully');
+}
 
 console.log('[PRISMA] Creating PrismaClient...');
+
+// Ensure DATABASE_URL is available before creating the client
+if (!process.env.DATABASE_URL) {
+  console.error('[PRISMA] DATABASE_URL not found in environment');
+  console.error('[PRISMA] Available env vars:', Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('URL')));
+  throw new Error('DATABASE_URL environment variable is required');
+}
+
+console.log('[PRISMA] DATABASE_URL verified:', process.env.DATABASE_URL.substring(0, 30) + '...');
 
 /**
  * Instantiate Prisma Client with connection pooling
@@ -13,13 +41,6 @@ let prisma: PrismaClient;
 try {
   prisma = new PrismaClient({
     log: ['warn', 'error'], // Only log warnings and errors
-    
-    // ✅ Add connection pool configuration
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
   });
 
   // ✅ Set connection pool limits (prevents connection drops)
@@ -34,14 +55,24 @@ try {
   process.exit(1);
 }
 
-// ✅ Test database connection on startup
-prisma.$connect()
+// ✅ Test database connection on startup (lazy connection)
+let connectionPromise: Promise<void> | null = null;
+
+export async function ensureDbConnection() {
+  if (!connectionPromise) {
+    connectionPromise = prisma.$connect();
+  }
+  return connectionPromise;
+}
+
+// Lazy connection - only connect when needed
+ensureDbConnection()
   .then(() => {
     console.log('[PRISMA] Database connection established');
   })
   .catch((error) => {
     console.error('[PRISMA] Failed to connect to database:', error);
-    process.exit(1);
+    // Don't exit immediately - let the app try to serve requests
   });
 
 // ✅ Handle connection errors during runtime

@@ -3,6 +3,11 @@ import type { Config } from "tailwindcss";
 export default {
   darkMode: ["class"],
   content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  safelist: [
+    // Ensure emoji reaction animations are always included
+    'animate-emoji-bounce',
+    'animate-float-up',
+  ],
   prefix: "",
   theme: {
     container: {
@@ -103,11 +108,69 @@ export default {
           "50%": { transform: "scale(1)", opacity: "0.5" },
           "100%": { transform: "scale(0.95)", opacity: "1" },
         },
+        "float-up": {
+          "0%": { 
+            transform: "translateY(0px) scale(0)", 
+            opacity: "0" 
+          },
+          "10%": {
+            transform: "translateY(-20px) scale(1.3)",
+            opacity: "1"
+          },
+          "50%": { 
+            transform: "translateY(-200px) scale(1)", 
+            opacity: "1" 
+          },
+          "85%": { 
+            transform: "translateY(-350px) scale(1)", 
+            opacity: "0.7" 
+          },
+          "100%": { 
+            transform: "translateY(-500px) scale(0.8)", 
+            opacity: "0" 
+          },
+        },
+        "emoji-bounce": {
+          "0%": {
+            transform: "translateY(0px) scale(0)",
+            opacity: "0"
+          },
+          "5%": {
+            transform: "translateY(-10px) scale(1.4)",
+            opacity: "1"
+          },
+          "15%": {
+            transform: "translateY(-40px) scale(1.1)",
+            opacity: "1"
+          },
+          "30%": {
+            transform: "translateY(-100px) scale(1.05)",
+            opacity: "1"
+          },
+          "50%": {
+            transform: "translateY(-200px) scale(1)",
+            opacity: "1"
+          },
+          "75%": {
+            transform: "translateY(-350px) scale(0.95)",
+            opacity: "0.6"
+          },
+          "90%": {
+            transform: "translateY(-450px) scale(0.85)",
+            opacity: "0.2"
+          },
+          "100%": {
+            transform: "translateY(-550px) scale(0.8)",
+            opacity: "0"
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "pulse-ring": "pulse-ring 2s ease-in-out infinite",
+        "float-up": "float-up 3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards",
+        "emoji-bounce": "emoji-bounce 3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
       },
     },
   },

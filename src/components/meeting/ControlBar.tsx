@@ -29,11 +29,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import EmojiPicker from "./EmojiPicker";
 
 interface ControlBarProps {
   onToggleParticipants: () => void;
   onToggleChat: () => void;
   onLeaveMeeting?: () => void;
+  onEmojiReaction?: (emoji: string) => void;
   isParticipantsOpen: boolean;
   isChatOpen: boolean;
   participantCount: number;
@@ -50,6 +52,7 @@ const ControlBar = ({
   onToggleParticipants,
   onToggleChat,
   onLeaveMeeting,
+  onEmojiReaction,
   isParticipantsOpen,
   isChatOpen,
   participantCount,
@@ -133,12 +136,12 @@ const ControlBar = ({
             </TooltipContent>
           </Tooltip>
 
-          {/* Reactions */}
+          {/* Reactions Emoji Picker */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="control" size="control">
-                <SmilePlus className="w-5 h-5" />
-              </Button>
+              <div>
+                <EmojiPicker onEmojiSelect={onEmojiReaction} />
+              </div>
             </TooltipTrigger>
             <TooltipContent>
               <p>Reactions</p>

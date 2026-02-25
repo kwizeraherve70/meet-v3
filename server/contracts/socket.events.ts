@@ -27,6 +27,9 @@ export const ClientEvents = {
   RAISE_HAND: 'raise-hand',
   LOWER_HAND: 'lower-hand',
   
+  // Emoji reactions
+  SEND_EMOJI_REACTION: 'send-emoji-reaction',
+  
   // Connection events
   PING: 'ping',
   RECONNECT: 'reconnect',
@@ -58,6 +61,9 @@ export const ServerEvents = {
   // Participant events
   HAND_RAISED: 'hand-raised',
   HAND_LOWERED: 'hand-lowered',
+  
+  // Emoji reactions
+  EMOJI_REACTION_RECEIVED: 'emoji-reaction-received',
   
   // Connection events
   PONG: 'pong',

@@ -26,6 +26,10 @@ export interface SocketEvents {
   'answer': { to: string | number; roomId: string | number; answer: any };
   'icecandidate': { to: string | number; roomId: string | number; candidate: any };
   
+  // Emoji reactions
+  'send-emoji-reaction': { roomId: number; emoji: string };
+  'emoji-reaction-received': { emoji: string; senderName: string; id: string; timestamp: number };
+  
   // Server events
   'user-joined': { userId: string | number; userName: string; isHost?: boolean };
   'user-left': { userId: string | number; userName: string };
