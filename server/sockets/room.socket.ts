@@ -563,6 +563,64 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
   });
 
   /**
+   * EVENT: User raises hand in meeting
+   * Sent by: Client when hand icon is clicked
+   * Broadcasts: Hand raised notification to all participants
+   */
+  socket.on('raise-hand', async (data: any) => {
+    try {
+      const { randomUUID } = await import('crypto');
+
+      const roomId = typeof data.roomId === 'string'
+        ? parseInt(data.roomId, 10)
+        : data.roomId;
+
+      // Validate room ID
+      if (!roomId || isNaN(roomId)) {
+        socket.emit('error', {
+          type: 'INVALID_ROOM_ID',
+          message: 'Invalid room ID',
+        });
+        return;
+      }
+
+      // Check if user is in this room
+      const roomSockets = getSocketsInRoom(roomId);
+      const isUserInRoom = roomSockets.some((s) => s.socketId === socket.id);
+
+      if (!isUserInRoom) {
+        socket.emit('error', {
+          type: 'NOT_IN_ROOM',
+          message: 'You are not in this room',
+        });
+        return;
+      }
+
+      // Broadcast hand raised to room
+      const handId = randomUUID();
+      io.to(`room-${roomId}`).emit('hand-raised', {
+        senderName: user.name,
+        id: handId,
+        timestamp: Date.now(),
+      });
+
+      logger.debug('RoomHandler', 'Hand raised', {
+        senderName: user.name,
+        roomId,
+      });
+    } catch (error) {
+      logger.error('RoomHandler', 'Error handling raise hand', {
+        socketId: socket.id,
+        error: (error as Error).message,
+      });
+      socket.emit('error', {
+        type: 'HAND_RAISE_FAILED',
+        message: 'Failed to raise hand',
+      });
+    }
+  });
+
+  /**
    * EVENT: Socket error
    * Triggered: When socket encounters an error
    */

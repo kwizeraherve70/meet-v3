@@ -9,6 +9,7 @@ import ControlBar from "@/components/meeting/ControlBar";
 import ParticipantsSidebar from "@/components/meeting/ParticipantsSidebar";
 import ChatSidebar from "@/components/meeting/ChatSidebar";
 import FloatingEmojis, { FloatingReaction } from "@/components/meeting/FloatingEmojis";
+import FloatingHands, { FloatingHandReaction } from "@/components/meeting/FloatingHands";
 import DebugInfo from "@/components/DebugInfo";
 import { socketService } from "@/lib/socket";
 
@@ -23,6 +24,7 @@ const MeetingRoom = () => {
   const [hasJoined, setHasJoined] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
+  const [floatingHands, setFloatingHands] = useState<FloatingHandReaction[]>([]);
 
   // Get meeting preferences from localStorage
   const getMeetingPreferences = () => {
@@ -77,6 +79,29 @@ const MeetingRoom = () => {
 
     // Register listener and get unsubscribe function
     const unsubscribe = socketService.on('emoji-reaction-received', handleEmojiReaction);
+
+    // Cleanup listener
+    return () => {
+      unsubscribe();
+    };
+  }, [hasJoined, roomId]);
+
+  // Setup socket listener for hand raises
+  useEffect(() => {
+    if (!hasJoined || !roomId) return;
+
+    const handleHandRaised = (data: any) => {
+      const newHand: FloatingHandReaction = {
+        id: data.id,
+        senderName: data.senderName,
+        createdAt: data.timestamp,
+      };
+      
+      setFloatingHands((prev) => [...prev, newHand]);
+    };
+
+    // Register listener and get unsubscribe function
+    const unsubscribe = socketService.on('hand-raised', handleHandRaised);
 
     // Cleanup listener
     return () => {
@@ -142,6 +167,19 @@ const MeetingRoom = () => {
     setFloatingReactions((prev) => prev.filter((r) => r.id !== reactionId));
   };
 
+  const handleRaiseHand = (isRaised: boolean) => {
+    if (!roomId) return;
+
+    // Emit raise hand to server
+    socketService.emit('raise-hand', {
+      roomId: parseInt(roomId),
+    });
+  };
+
+  const handleRemoveFloatingHand = (handId: string) => {
+    setFloatingHands((prev) => prev.filter((h) => h.id !== handId));
+  };
+
   const isSidebarOpen = isParticipantsOpen || isChatOpen;
   const participantCount = Object.keys(state.users).length;
 
@@ -175,6 +213,7 @@ const MeetingRoom = () => {
         onToggleChat={handleToggleChat}
         onLeaveMeeting={handleLeaveMeeting}
         onEmojiReaction={handleEmojiReaction}
+        onRaiseHand={handleRaiseHand}
         isParticipantsOpen={isParticipantsOpen}
         isChatOpen={isChatOpen}
         participantCount={participantCount}
@@ -190,6 +229,11 @@ const MeetingRoom = () => {
       <FloatingEmojis 
         reactions={floatingReactions}
         onRemoveReaction={handleRemoveFloatingReaction}
+      />
+
+      <FloatingHands
+        hands={floatingHands}
+        onRemoveHand={handleRemoveFloatingHand}
       />
 
       <ParticipantsSidebar
