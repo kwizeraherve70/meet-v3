@@ -5,7 +5,7 @@ interface MeetingActionCardProps {
   icon: LucideIcon;
   title: string;
   description: string;
-  color: "primary" | "success" | "orange" | "purple";
+  color: "primary" | "success" | "orange" | "purple" | "red";
   onClick?: () => void;
 }
 
@@ -14,6 +14,7 @@ const colorClasses = {
   success: "bg-success hover:bg-success/90",
   orange: "bg-orange-500 hover:bg-orange-500/90",
   purple: "bg-violet-500 hover:bg-violet-500/90",
+  red: "bg-red-500 hover:bg-red-500/90",
 };
 
 const MeetingActionCard = ({

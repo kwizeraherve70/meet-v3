@@ -32,6 +32,7 @@ export interface Room {
   title: string;
   created_at: Date;
   ended_at: Date | null;
+  participant_count?: number;
 }
 
 export interface CreateRoomRequest {

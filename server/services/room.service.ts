@@ -166,12 +166,7 @@ export class RoomService {
    * @param userId User ID
    */
   async getUserRooms(userId: number): Promise<Room[]> {
-    // Try cache first
-    const cached = await cache.get<Room[]>(CACHE_KEYS.USER_ROOMS(userId));
-    if (cached) {
-      return cached;
-    }
-
+    // Note: skip cache so participant counts are always fresh
     const rooms = await prisma.room.findMany({
       where: { createdById: userId },
       select: {
@@ -187,6 +182,32 @@ export class RoomService {
       orderBy: { createdAt: 'desc' },
     });
 
+    if (rooms.length === 0) return [];
+
+    const roomIds = rooms.map((r) => r.id);
+
+    // Count distinct registered users per room (deduplicated by userId)
+    const registeredGroups = await prisma.participant.groupBy({
+      by: ['roomId', 'userId'],
+      where: { roomId: { in: roomIds }, userId: { not: null } },
+    });
+    // registeredGroups has one entry per unique (roomId, userId) pair
+    const registeredCountMap: Record<number, number> = {};
+    for (const row of registeredGroups) {
+      registeredCountMap[row.roomId] = (registeredCountMap[row.roomId] || 0) + 1;
+    }
+
+    // Count guest rows per room (each session is a unique attendee)
+    const guestGroups = await prisma.participant.groupBy({
+      by: ['roomId'],
+      where: { roomId: { in: roomIds }, isGuest: true },
+      _count: { id: true },
+    });
+    const guestCountMap: Record<number, number> = {};
+    for (const row of guestGroups) {
+      guestCountMap[row.roomId] = row._count.id;
+    }
+
     const roomList = rooms.map((room) => ({
       id: room.id,
       room_id: room.roomCode,
@@ -194,10 +215,8 @@ export class RoomService {
       title: room.title,
       created_at: room.createdAt,
       ended_at: room.updatedAt,
+      participant_count: (registeredCountMap[room.id] || 0) + (guestCountMap[room.id] || 0),
     })) as Room[];
-
-    // Cache the rooms list
-    await cache.set(CACHE_KEYS.USER_ROOMS(userId), roomList, CACHE_TTL.USER_ROOMS);
 
     return roomList;
   }

@@ -67,6 +67,7 @@ router.get('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =>
       isActive: false, // Default value
       createdAt: room.created_at,
       updatedAt: room.created_at,
+      participantCount: room.participant_count ?? 0,
     }));
     
     res.json(transformedRooms);
@@ -117,7 +118,8 @@ router.post('/:roomCode/join', requireAuth, async (req: AuthenticatedRequest, re
 
     const roomCode = req.params.roomCode as string;
     const room = await roomService.getRoomByCode(roomCode);
-    await roomService.addParticipant(req.user!.userId, room.id);
+    // Note: participant tracking is handled by the socket join-room event,
+    // not the REST endpoint, to avoid double-counting.
 
     res.json(room);
   } catch (error) {
@@ -155,9 +157,7 @@ router.post('/:roomCode/guest-join', async (req, res) => {
 
     // Get room by code
     const room = await roomService.getRoomByCode(req.params.roomCode as string);
-
-    // Add guest participant to room
-    await roomService.addGuestParticipant(guestName.trim(), room.id);
+    // Note: participant tracking is handled by the socket join-room event.
 
     // Create guest token
     const { token, guestId } = userService.createGuestToken(guestName.trim());

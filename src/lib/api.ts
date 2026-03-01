@@ -31,6 +31,7 @@ export interface RoomResponse {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  participantCount?: number;
   participants?: Array<{
     id: number;
     userId: number;
