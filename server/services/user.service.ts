@@ -75,39 +75,26 @@ export class UserService {
    * @throws Error if credentials are invalid
    */
   async loginUser(email: string, password: string): Promise<AuthResponse> {
-    // Check cache first for user by email
-    let user = await cache.get<any>(CACHE_KEYS.USER_EMAIL(email));
+    // Always fetch from database for login to get passwordHash
+    // (passwordHash is not cached for security reasons)
+    const dbUser = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        passwordHash: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
 
-    if (!user) {
-      // Find user by email
-      const dbUser = await prisma.user.findUnique({
-        where: { email },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          passwordHash: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-
-      if (!dbUser) {
-        throw new Error('Invalid email or password');
-      }
-
-      user = {
-        id: dbUser.id,
-        name: dbUser.name,
-        email: dbUser.email,
-        passwordHash: dbUser.passwordHash,
-        createdAt: dbUser.createdAt,
-        updatedAt: dbUser.updatedAt,
-      };
+    if (!dbUser) {
+      throw new Error('Invalid email or password');
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(password, dbUser.passwordHash);
 
     if (!isPasswordValid) {
       throw new Error('Invalid email or password');
@@ -116,27 +103,27 @@ export class UserService {
     // Generate JWT tokens
     const secret = (process.env.JWT_SECRET || 'dev_secret_key_12345') as string;
     const accessToken = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: dbUser.id, email: dbUser.email },
       secret,
       { expiresIn: process.env.JWT_EXPIRY || '15m' } as any
     );
 
     const refreshToken = jwt.sign(
-      { userId: user.id },
+      { userId: dbUser.id },
       secret,
       { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' } as any
     );
 
-    // Cache user session
+    // Cache user session (without passwordHash for security)
     const userSession = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      created_at: user.createdAt,
-      updated_at: user.updatedAt,
+      id: dbUser.id,
+      name: dbUser.name,
+      email: dbUser.email,
+      created_at: dbUser.createdAt,
+      updated_at: dbUser.updatedAt,
     };
-    await cache.set(CACHE_KEYS.USER_SESSION(user.id), userSession, CACHE_TTL.SESSION);
-    await cache.set(CACHE_KEYS.USER_ID(user.id), userSession, CACHE_TTL.USER);
+    await cache.set(CACHE_KEYS.USER_SESSION(dbUser.id), userSession, CACHE_TTL.SESSION);
+    await cache.set(CACHE_KEYS.USER_ID(dbUser.id), userSession, CACHE_TTL.USER);
 
     return {
       accessToken: accessToken,

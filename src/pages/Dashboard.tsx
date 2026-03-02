@@ -457,7 +457,7 @@ const Dashboard = () => {
                       title={room.title}
                       time={new Date(room.createdAt).toLocaleTimeString()}
                       date={new Date(room.createdAt).toLocaleDateString()}
-                      participants={room.participants?.length || 0}
+                      participants={room.participantCount ?? 0}
                       isLive={room.isActive}
                     />
                   </div>

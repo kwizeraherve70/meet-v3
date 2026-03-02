@@ -29,6 +29,7 @@ class WebRTCService {
   private hasJoined: boolean = false;
   private persistedUser: string | null = null;
   private persistedRoom: string | null = null;
+  private listenersSetup: boolean = false;
   
   private state: CallState = {
     isInCall: false,
@@ -50,7 +51,7 @@ class WebRTCService {
     // Restore user identity from sessionStorage first
     this.restoreUserSession();
     
-    this.setupSocketListeners(); 
+    // Note: listeners will be set up lazily when joining room after socket connects
     
     WebRTCService.instance = this;
     
@@ -127,8 +128,11 @@ class WebRTCService {
       await socketService.connect();
       console.log('Socket connected via socketService');
       
-      // Set up socket event listeners
-      this.setupSocketListeners();
+      // Set up socket event listeners if not already done
+      if (!this.listenersSetup) {
+        this.setupSocketListeners();
+        this.listenersSetup = true;
+      }
       
       // Auto-rejoin if we have persisted session and haven't joined yet
       if (this.persistedUser && this.persistedRoom && !this.hasJoined) {
@@ -501,6 +505,12 @@ class WebRTCService {
 
     console.log('Joining user:', username, 'in room:', roomId);
     
+    // Set up listeners now that the socket is guaranteed to be connected
+    if (!this.listenersSetup) {
+      this.setupSocketListeners();
+      this.listenersSetup = true;
+    }
+    
     // Get preferences BEFORE joining to set correct initial state
     const preferences = this.getMeetingPreferences();
     const initialVideoEnabled = preferences?.isVideoOn !== false; // Default to true
@@ -604,6 +614,12 @@ class WebRTCService {
 
   async autoRejoinUser(username: string, roomId: string): Promise<void> {
     console.log('Auto-rejoining user:', username, 'in room:', roomId);
+    
+    // Set up listeners now that the socket is guaranteed to be connected
+    if (!this.listenersSetup) {
+      this.setupSocketListeners();
+      this.listenersSetup = true;
+    }
     
     // Get preferences for media state
     const preferences = this.getMeetingPreferences();
@@ -1243,6 +1259,7 @@ class WebRTCService {
     WebRTCService.instance = null;
     this.clearUserSession();
     this.hasJoined = false;
+    this.listenersSetup = false;
     this.stateChangeCallback = null;
   }
 }export default WebRTCService;

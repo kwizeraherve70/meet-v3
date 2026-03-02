@@ -105,6 +105,37 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       // Join socket to room namespace
       socket.join(`room-${roomId}`);
 
+      // ✅ Persist participant to DB (skip for reconnects already handled above)
+      try {
+        if (!user.isGuest && user.id) {
+          // For registered users: upsert — clear leftAt if re-joining
+          const existing = await prisma.participant.findFirst({
+            where: { roomId, userId: user.id },
+          });
+          if (existing) {
+            await prisma.participant.update({
+              where: { id: existing.id },
+              data: { leftAt: null, joinedAt: new Date(), isHost },
+            });
+          } else {
+            await prisma.participant.create({
+              data: { roomId, userId: user.id, isHost },
+            });
+          }
+        } else if (user.isGuest) {
+          // Guests always get a new record each session
+          await prisma.participant.create({
+            data: { roomId, guestName: user.name, isGuest: true },
+          });
+        }
+      } catch (dbErr) {
+        logger.warn('RoomHandler', 'Could not persist participant to DB', {
+          userId: user.id,
+          roomId,
+          error: (dbErr as Error).message,
+        });
+      }
+
       // Get current room participants
       const roomSockets = getSocketsInRoom(roomId);
       const participants = roomSockets.map((s) => ({
@@ -140,8 +171,17 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       // If there are existing participants, request peer setup for mid-call join
       // New user will initiate offers to existing participants
       if (participants.length > 1) {
-        // Send list of peers to establish connections with
-        const existingPeers = participants.filter((p) => p.userId !== user.id);
+        // Filter by socketId — unambiguous, works for both guests and registered users
+        const roomSocketsFull = getSocketsInRoom(roomId);
+        const existingPeers = roomSocketsFull
+          .filter((s) => s.socketId !== socket.id)
+          .map((s) => ({
+            userId: s.userId || s.guestId,
+            userName: s.userName,
+            isHost: s.isHost,
+            mediaState: s.mediaState || { isVideoEnabled: true, isAudioEnabled: true },
+          }));
+
         socket.emit('sync-peers', {
           peers: existingPeers,
           message: 'Initiate peer connections with these users',
@@ -373,6 +413,14 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       const wasHost = socketState.isHost;
       removeSocketFromRoom(socket.id, roomId);
 
+      // ✅ Mark participant as left in DB
+      if (!user.isGuest && user.id) {
+        await prisma.participant.updateMany({
+          where: { roomId, userId: user.id, leftAt: null },
+          data: { leftAt: new Date() },
+        }).catch(() => {/* non-critical */});
+      }
+
       // If host left, handle room closure or host promotion
       if (wasHost) {
         const remainingParticipants = getSocketsInRoom(roomId);
@@ -444,6 +492,14 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
       if (removedState && removedState.roomId) {
         const roomId = removedState.roomId;
         const wasHost = removedState.isHost;
+
+        // ✅ Mark participant as left in DB on disconnect
+        if (removedState.userId) {
+          await prisma.participant.updateMany({
+            where: { roomId: Number(roomId), userId: Number(removedState.userId), leftAt: null },
+            data: { leftAt: new Date() },
+          }).catch(() => {/* non-critical */});
+        }
 
         // Mark user for soft reconnection (30-second grace period)
         markForReconnect(
