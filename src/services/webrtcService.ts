@@ -6,6 +6,7 @@ export interface User {
   isLocal?: boolean;
   isVideoEnabled?: boolean;
   isAudioEnabled?: boolean;
+  isHost?: boolean;
   connectionState?: RTCPeerConnectionState;
 }
 
@@ -18,6 +19,7 @@ export interface CallState {
   roomId: string | null;
   isScreenSharing: boolean;
   screenShareStream: MediaStream | null;
+  isHost: boolean;
 }
 
 class WebRTCService {
@@ -39,7 +41,8 @@ class WebRTCService {
     currentUser: null,
     roomId: null,
     isScreenSharing: false,
-    screenShareStream: null
+    screenShareStream: null,
+    isHost: false
   };
 
   constructor() {
@@ -183,11 +186,12 @@ class WebRTCService {
       }
 
       const user: User = {
-        username: username,  // Use userName from server
-        id: userId,  // Handle null userId for guests
+        username: username,
+        id: userId,
         isLocal: false,
         isVideoEnabled: true,
-        isAudioEnabled: true
+        isAudioEnabled: true,
+        isHost: data.isHost ?? false,
       };
 
       console.log('Adding user to state:', user);
@@ -286,6 +290,9 @@ class WebRTCService {
       console.log('Room joined event received:', data);
       const { participants, isHost } = data;
 
+      // Store our host status
+      this.updateState({ isHost: !!isHost });
+
       // Add all existing participants (excluding ourselves) to users list
       if (participants && Array.isArray(participants)) {
         const newUsers = { ...this.state.users };
@@ -304,20 +311,53 @@ class WebRTCService {
               isLocal: false,
               isVideoEnabled: participant.mediaState?.isVideoEnabled ?? true,
               isAudioEnabled: participant.mediaState?.isAudioEnabled ?? true,
+              isHost: participant.isHost ?? false,
             };
           } else {
-            // Update our own ID from the server
+            // Update our own ID and host flag from the server
             console.log('Updating local user ID from server:', participant.userId);
             if (this.state.currentUser) {
               newUsers[this.state.currentUser] = {
                 ...newUsers[this.state.currentUser],
-                id: participant.userId?.toString()
+                id: participant.userId?.toString(),
+                isHost: !!isHost,
               };
             }
           }
         }
         this.updateState({ users: newUsers });
       }
+    });
+
+    // Host promoted — update isHost for the new host client-side
+    socketService.on('host-promoted', (data: any) => {
+      const { newHostUserId, newHostName } = data;
+      const newUsers = { ...this.state.users };
+
+      // Determine if we are the newly promoted host
+      const selfId = this.state.currentUser ? this.state.users[this.state.currentUser]?.id : null;
+      const weAreNewHost =
+        (selfId && newHostUserId && selfId === newHostUserId.toString()) ||
+        newHostName === this.state.currentUser;
+
+      // Clear isHost from all users, then set it on the promoted participant
+      for (const username of Object.keys(newUsers)) {
+        newUsers[username] = { ...newUsers[username], isHost: username === newHostName };
+      }
+
+      this.updateState({ users: newUsers, isHost: !!weAreNewHost });
+    });
+
+    // Force-mute: host instructed this client to mute itself
+    socketService.on('force-mute', (_data: any) => {
+      console.log('Force-muted by host');
+      this.toggleAudio(false);
+    });
+
+    // Force-video-disabled: host instructed this client to turn off its camera
+    socketService.on('force-video-disabled', (_data: any) => {
+      console.log('Video force-disabled by host');
+      this.toggleVideo(false);
     });
 
     // Sync peers - server tells us to initiate connections to these peers
@@ -1045,77 +1085,82 @@ class WebRTCService {
 
   toggleVideo(enabled: boolean): void {
     console.log('Toggling video to:', enabled);
-    
+
+    // Modify the actual track if the stream is available
     if (this.localStream) {
       this.localStream.getVideoTracks().forEach(track => {
         track.enabled = enabled;
       });
-      
-      // Update local user state
-      if (this.state.currentUser) {
-        this.updateState({
-          users: {
-            ...this.state.users,
-            [this.state.currentUser]: {
-              ...this.state.users[this.state.currentUser],
-              isVideoEnabled: enabled
-            }
+    } else {
+      console.warn('No local stream available for video track toggle — updating state only');
+    }
+
+    // Always update local user state and notify peers, regardless of stream availability.
+    // The sidebar reads from state.users, not from the stream directly, so state must
+    // always be updated to keep the UI in sync.
+    if (this.state.currentUser) {
+      this.updateState({
+        users: {
+          ...this.state.users,
+          [this.state.currentUser]: {
+            ...this.state.users[this.state.currentUser],
+            isVideoEnabled: enabled
+          }
+        }
+      });
+
+      // Broadcast state change to other users
+      if (socketService.isSocketConnected() && this.state.roomId) {
+        socketService.emit('update-media-state', {
+          roomId: this.state.roomId,
+          mediaState: {
+            isVideoEnabled: enabled,
+            isAudioEnabled: this.state.users[this.state.currentUser]?.isAudioEnabled ?? true
           }
         });
-
-        // Broadcast state change to other users
-        if (socketService.isSocketConnected() && this.state.roomId) {
-          socketService.emit('update-media-state', {
-            roomId: this.state.roomId,
-            mediaState: {
-              isVideoEnabled: enabled,
-              isAudioEnabled: this.state.users[this.state.currentUser]?.isAudioEnabled ?? true
-            }
-          });
-        }
       }
-    } else {
-      console.warn('No local stream available for video toggle');
     }
   }
 
   toggleAudio(enabled: boolean): void {
     console.log('Toggling audio to:', enabled);
-    
+
+    // Modify the actual track if the stream is available
     if (this.localStream) {
       const audioTracks = this.localStream.getAudioTracks();
       console.log('Audio tracks found:', audioTracks.length);
-      
       audioTracks.forEach(track => {
         track.enabled = enabled;
         console.log('Audio track enabled:', track.enabled);
       });
+    } else {
+      console.warn('No local stream available for audio track toggle — updating state only');
+    }
 
-      // Update local user state
-      if (this.state.currentUser) {
-        this.updateState({
-          users: {
-            ...this.state.users,
-            [this.state.currentUser]: {
-              ...this.state.users[this.state.currentUser],
-              isAudioEnabled: enabled
-            }
+    // Always update local user state and notify peers, regardless of stream availability.
+    // The sidebar reads from state.users, not from the stream directly, so state must
+    // always be updated to keep the UI in sync.
+    if (this.state.currentUser) {
+      this.updateState({
+        users: {
+          ...this.state.users,
+          [this.state.currentUser]: {
+            ...this.state.users[this.state.currentUser],
+            isAudioEnabled: enabled
+          }
+        }
+      });
+
+      // Broadcast state change to other users
+      if (socketService.isSocketConnected() && this.state.roomId) {
+        socketService.emit('update-media-state', {
+          roomId: this.state.roomId,
+          mediaState: {
+            isVideoEnabled: this.state.users[this.state.currentUser]?.isVideoEnabled ?? true,
+            isAudioEnabled: enabled
           }
         });
-
-        // Broadcast state change to other users
-        if (socketService.isSocketConnected() && this.state.roomId) {
-          socketService.emit('update-media-state', {
-            roomId: this.state.roomId,
-            mediaState: {
-              isVideoEnabled: this.state.users[this.state.currentUser]?.isVideoEnabled ?? true,
-              isAudioEnabled: enabled
-            }
-          });
-        }
       }
-    } else {
-      console.warn('No local stream available for audio toggle');
     }
   }
 

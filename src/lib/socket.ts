@@ -34,12 +34,20 @@ export interface SocketEvents {
   'raise-hand': { roomId: number };
   'hand-raised': { senderName: string; id: string; timestamp: number };
   
+  // Host control events (client → server)
+  'host-mute-participant': { roomId: string | number; targetUserId: string | number };
+  'host-disable-video': { roomId: string | number; targetUserId: string | number };
+  'host-mute-all': { roomId: string | number };
+
   // Server events
   'user-joined': { userId: string | number; userName: string; isHost?: boolean };
   'user-left': { userId: string | number; userName: string };
   'message-received': { id: string | number; userId: string | number; userName: string; content: string; timestamp: string };
   'message-history': { roomId: string | number; messages: any[]; count: number };
   'user-media-state': { userId: string | number; mediaState: { isVideoEnabled: boolean; isAudioEnabled: boolean } };
+  'host-promoted': { newHostUserId: string | number; newHostName: string };
+  'force-mute': { by: string };
+  'force-video-disabled': { by: string };
   'error': { message: string };
   'connected': {};
   'disconnected': {};
