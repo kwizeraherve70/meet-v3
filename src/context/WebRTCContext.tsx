@@ -14,6 +14,7 @@ interface WebRTCContextType {
   stopScreenShare: () => Promise<void>;
   isVideoEnabled: boolean;
   isAudioEnabled: boolean;
+  isHost: boolean;
 }
 
 export const WebRTCContext = createContext<WebRTCContextType | null>(null);
@@ -27,7 +28,8 @@ export const WebRTCProvider: React.FC<{ children: React.ReactNode; roomId?: stri
     currentUser: null,
     roomId: null,
     isScreenSharing: false,
-    screenShareStream: null
+    screenShareStream: null,
+    isHost: false,
   });
   
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
@@ -149,7 +151,8 @@ export const WebRTCProvider: React.FC<{ children: React.ReactNode; roomId?: stri
         startScreenShare,
         stopScreenShare,
         isVideoEnabled,
-        isAudioEnabled
+        isAudioEnabled,
+        isHost: state.isHost,
       }}
     >
       {children}

@@ -10,7 +10,7 @@ import {
   removeSocket,
   updateLastActivity,
 } from '../state/socket.state.js';
-import { validateRoomAccess, isRoomHost, getRoomInfo } from '../middleware/room.access.js';
+import { validateRoomAccess, isRoomHost } from '../middleware/room.access.js';
 import { RoomService } from '../services/room.service.js';
 import {
   markForReconnect,
@@ -41,7 +41,7 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
 
   // Register socket in state
   registerSocket(socket.id);
-  authenticateSocket(socket.id, user.id, user.name, user.email);
+  authenticateSocket(socket.id, user.id, user.name, user.email, user.isGuest, user.guestId);
 
   logger.info('RoomHandler', 'User socket ready for room operations', {
     socketId: socket.id,
@@ -399,6 +399,242 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
   });
 
   /**
+   * EVENT: Host mutes a specific participant
+   * Sent by: Host only — validated server-side via SocketState.isHost
+   * Emits: force-mute to target socket, user-media-state broadcast to room
+   */
+  socket.on('host-mute-participant', (data: any) => {
+    try {
+      const { roomId, targetUserId } = data;
+      updateLastActivity(socket.id);
+
+      // Server-side authorization: isHost is set by the server during join-room, never by the client
+      const emitterState = getSocket(socket.id);
+      if (!emitterState?.isHost) {
+        socket.emit('error', {
+          type: 'UNAUTHORIZED',
+          message: 'Only the host can mute participants',
+        });
+        logger.warn('RoomHandler', 'Unauthorized host-mute-participant attempt', {
+          socketId: socket.id,
+          userId: user.id,
+          roomId,
+        });
+        return;
+      }
+
+      const roomSockets = getSocketsInRoom(roomId);
+      console.log('🔊 Room sockets available:', roomSockets.length);
+      console.log('🔊 Details:', roomSockets.map((s) => ({
+        socketId: s.socketId,
+        userId: s.userId,
+        guestId: s.guestId,
+        userName: s.userName,
+      })));
+
+      const isInRoom = roomSockets.some((s) => s.socketId === socket.id);
+      if (!isInRoom) {
+        socket.emit('error', { type: 'NOT_IN_ROOM', message: 'Not in room' });
+        return;
+      }
+
+      console.log('🔊 Looking for targetUserId:', targetUserId);
+
+      // Find target participant by userId or guestId
+      const targetState = roomSockets.find(
+        (s) =>
+          (s.userId !== null && s.userId.toString() === targetUserId?.toString()) ||
+          s.guestId === targetUserId
+      );
+
+      if (!targetState) {
+        socket.emit('error', { type: 'USER_NOT_FOUND', message: 'Participant not found in room' });
+        return;
+      }
+
+      // Prevent host from self-muting via this endpoint (they have their own controls)
+      if (targetState.socketId === socket.id) {
+        socket.emit('error', { type: 'INVALID_TARGET', message: 'Cannot use host controls on yourself' });
+        return;
+      }
+
+      // Update in-memory media state
+      if (targetState.mediaState) {
+        targetState.mediaState.isAudioEnabled = false;
+      } else {
+        targetState.mediaState = { isVideoEnabled: true, isAudioEnabled: false };
+      }
+
+      // Send force-mute only to the target socket
+      io.to(targetState.socketId).emit('force-mute', { by: user.name });
+
+      // Broadcast updated media state so all clients reflect the change
+      io.to(`room-${roomId}`).emit('user-media-state', {
+        userId: targetState.userId || targetState.guestId,
+        mediaState: targetState.mediaState,
+      });
+
+      logger.info('RoomHandler', 'Host muted participant', {
+        hostUserId: user.id,
+        targetUserId,
+        roomId,
+      });
+    } catch (error) {
+      logger.error('RoomHandler', 'Error in host-mute-participant', {
+        socketId: socket.id,
+        error: (error as Error).message,
+      });
+    }
+  });
+
+  /**
+   * EVENT: Host disables a specific participant's camera
+   * Sent by: Host only — validated server-side via SocketState.isHost
+   * Emits: force-video-disabled to target socket, user-media-state broadcast to room
+   */
+  socket.on('host-disable-video', (data: any) => {
+    try {
+      const { roomId, targetUserId } = data;
+      updateLastActivity(socket.id);
+
+      const emitterState = getSocket(socket.id);
+      if (!emitterState?.isHost) {
+        socket.emit('error', {
+          type: 'UNAUTHORIZED',
+          message: 'Only the host can disable participant cameras',
+        });
+        logger.warn('RoomHandler', 'Unauthorized host-disable-video attempt', {
+          socketId: socket.id,
+          userId: user.id,
+          roomId,
+        });
+        return;
+      }
+
+      const roomSockets = getSocketsInRoom(roomId);
+      console.log('📹 Room sockets available:', roomSockets.length);
+      console.log('📹 Details:', roomSockets.map((s) => ({
+        socketId: s.socketId,
+        userId: s.userId,
+        guestId: s.guestId,
+        userName: s.userName,
+      })));
+
+      const isInRoom = roomSockets.some((s) => s.socketId === socket.id);
+      if (!isInRoom) {
+        socket.emit('error', { type: 'NOT_IN_ROOM', message: 'Not in room' });
+        return;
+      }
+
+      console.log('📹 Looking for targetUserId:', targetUserId);
+
+      const targetState = roomSockets.find(
+        (s) =>
+          (s.userId !== null && s.userId.toString() === targetUserId?.toString()) ||
+          s.guestId === targetUserId
+      );
+
+      if (!targetState) {
+        socket.emit('error', { type: 'USER_NOT_FOUND', message: 'Participant not found in room' });
+        return;
+      }
+
+      if (targetState.socketId === socket.id) {
+        socket.emit('error', { type: 'INVALID_TARGET', message: 'Cannot use host controls on yourself' });
+        return;
+      }
+
+      if (targetState.mediaState) {
+        targetState.mediaState.isVideoEnabled = false;
+      } else {
+        targetState.mediaState = { isVideoEnabled: false, isAudioEnabled: true };
+      }
+
+      io.to(targetState.socketId).emit('force-video-disabled', { by: user.name });
+
+      io.to(`room-${roomId}`).emit('user-media-state', {
+        userId: targetState.userId || targetState.guestId,
+        mediaState: targetState.mediaState,
+      });
+
+      logger.info('RoomHandler', 'Host disabled participant video', {
+        hostUserId: user.id,
+        targetUserId,
+        roomId,
+      });
+    } catch (error) {
+      logger.error('RoomHandler', 'Error in host-disable-video', {
+        socketId: socket.id,
+        error: (error as Error).message,
+      });
+    }
+  });
+
+  /**
+   * EVENT: Host mutes all participants
+   * Sent by: Host only — validated server-side via SocketState.isHost
+   * Emits: force-mute to each non-host socket, user-media-state broadcasts
+   */
+  socket.on('host-mute-all', (data: any) => {
+    try {
+      const { roomId } = data;
+      updateLastActivity(socket.id);
+
+      const emitterState = getSocket(socket.id);
+      if (!emitterState?.isHost) {
+        socket.emit('error', {
+          type: 'UNAUTHORIZED',
+          message: 'Only the host can mute all participants',
+        });
+        logger.warn('RoomHandler', 'Unauthorized host-mute-all attempt', {
+          socketId: socket.id,
+          userId: user.id,
+          roomId,
+        });
+        return;
+      }
+
+      const roomSockets = getSocketsInRoom(roomId);
+      const isInRoom = roomSockets.some((s) => s.socketId === socket.id);
+      if (!isInRoom) {
+        socket.emit('error', { type: 'NOT_IN_ROOM', message: 'Not in room' });
+        return;
+      }
+
+      let mutedCount = 0;
+      for (const participant of roomSockets) {
+        if (participant.isHost) continue; // Never mute the host
+
+        if (participant.mediaState) {
+          participant.mediaState.isAudioEnabled = false;
+        } else {
+          participant.mediaState = { isVideoEnabled: true, isAudioEnabled: false };
+        }
+
+        io.to(participant.socketId).emit('force-mute', { by: user.name });
+
+        io.to(`room-${roomId}`).emit('user-media-state', {
+          userId: participant.userId || participant.guestId,
+          mediaState: participant.mediaState,
+        });
+
+        mutedCount++;
+      }
+
+      logger.info('RoomHandler', 'Host muted all participants', {
+        hostUserId: user.id,
+        roomId,
+        mutedCount,
+      });
+    } catch (error) {
+      logger.error('RoomHandler', 'Error in host-mute-all', {
+        socketId: socket.id,
+        error: (error as Error).message,
+      });
+    }
+  });
+
+  /**
    * EVENT: Explicit room leave (before disconnect)
    * Sent by: Client's MeetingPage component (beforeunload)
    * Broadcasts to: All users in room
@@ -440,10 +676,10 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
         } else {
           // Promote first remaining participant as host
           const newHost = remainingParticipants[0];
-          const updatedHost = { ...newHost, isHost: true };
 
-          // Update Prisma to reflect new host if it's the room creator
-          // For now, just notify participants
+          // ✅ Update the in-memory SocketState so server-side host checks work for the promoted host
+          newHost.isHost = true;
+
           io.to(`room-${roomId}`).emit('host-promoted', {
             newHostUserId: newHost.userId,
             newHostName: newHost.userName,

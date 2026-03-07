@@ -182,14 +182,6 @@ const MeetingRoom = () => {
 
   const handleMuteParticipant = (targetUserId: string) => {
     if (!roomId) return;
-    
-    console.log('🔊 MUTE PARTICIPANT DEBUG:', {
-      targetUserId,
-      type: typeof targetUserId,
-      roomId: parseInt(roomId),
-      allUsers: state.users,
-    });
-    
     socketService.emit('host-mute-participant', {
       roomId: parseInt(roomId),
       targetUserId,
@@ -198,13 +190,6 @@ const MeetingRoom = () => {
 
   const handleDisableVideo = (targetUserId: string) => {
     if (!roomId) return;
-    
-    console.log('📹 DISABLE VIDEO DEBUG:', {
-      targetUserId,
-      type: typeof targetUserId,
-      roomId: parseInt(roomId),
-    });
-    
     socketService.emit('host-disable-video', {
       roomId: parseInt(roomId),
       targetUserId,
