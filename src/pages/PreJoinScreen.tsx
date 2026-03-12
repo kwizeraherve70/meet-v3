@@ -280,49 +280,17 @@ const PreJoinScreen = () => {
     try {
       let room: any;
       
-      if (isAuthenticated || isGuest) {
-        // ✅ Authenticated user or already-guest-logged-in
-        console.log('✅ Using authenticated/guest flow');
+      if (isAuthenticated) {
+        // Registered user with valid JWT — use existing session
         room = await apiClient.getRoomByCode(finalRoomCode);
       } else {
-        // ✅ Guest join flow - unauthenticated user
-        console.log('🔍 Using new guest flow');
-        console.log('🔍 Calling guestJoinRoom API...');
-        
+        // Guest join — always issue a fresh token so each person gets their own identity.
+        // This also handles the case where a stale guest session is in localStorage.
         const guestResult = await apiClient.guestJoinRoom(finalRoomCode, username.trim());
-        
-        // ✅ ENHANCED LOGGING
-        console.log('🔍 Guest API response:', guestResult);
-        console.log('🔍 Response keys:', Object.keys(guestResult));
-        console.log('🔍 guestResult.guestToken:', guestResult.guestToken);
-        console.log('🔍 guestResult.guestId:', guestResult.guestId);
-        console.log('🔍 guestResult.token:', guestResult.token);  // Maybe different field?
-        console.log('🔍 guestResult.id:', guestResult.id);  // Maybe different field?
-        
         room = guestResult;
-        
-        // Store guest session
-        console.log('🔍 About to call loginAsGuest with:');
-        console.log('  - name:', username.trim());
-        console.log('  - token:', guestResult.guestToken);
-        console.log('  - id:', guestResult.guestId);
-        
         loginAsGuest(username.trim(), guestResult.guestToken, guestResult.guestId);
-        
-        // Wait and check
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-        const savedToken = localStorage.getItem('guestToken');
-        const savedId = localStorage.getItem('guestId');
-        console.log('🔍 After loginAsGuest:');
-        console.log('  - guestToken in localStorage:', savedToken || 'NULL');
-        console.log('  - guestId in localStorage:', savedId || 'NULL');
-        
-        if (!savedToken) {
-          console.warn('⚠️ Guest token not saved!');
-        } else {
-          console.log('✅ Guest token saved successfully');
-        }
+        // Give React state and apiClient a tick to propagate the new token
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
       
       // Save meeting preferences to localStorage

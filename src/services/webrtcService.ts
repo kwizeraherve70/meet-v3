@@ -167,7 +167,8 @@ class WebRTCService {
       console.log('Data fields:', {
         userId: data.userId,
         userName: data.userName,
-        isHost: data.isHost
+        isHost: data.isHost,
+        mediaState: data.mediaState
       });
 
       // Handle field name from server (userName not username)
@@ -185,16 +186,19 @@ class WebRTCService {
         return;
       }
 
+      const mediaState = data.mediaState || { isVideoEnabled: true, isAudioEnabled: true };
+      
       const user: User = {
         username: username,
         id: userId,
         isLocal: false,
-        isVideoEnabled: true,
-        isAudioEnabled: true,
+        isVideoEnabled: mediaState.isVideoEnabled,
+        isAudioEnabled: mediaState.isAudioEnabled,
         isHost: data.isHost ?? false,
       };
 
-      console.log('Adding user to state:', user);
+      console.log('Adding user to state from user-joined:', user);
+      console.log('Media state:', mediaState);
 
       this.updateState({
         users: {
@@ -272,22 +276,32 @@ class WebRTCService {
     // Media state changed: Server emits 'user-media-state'
     socketService.on('user-media-state', (data: any) => {
       const { userId, mediaState } = data;
+      console.log('🎥 Received user-media-state:', { userId, mediaState });
+      console.log('🎥 Current users in state:', Object.keys(this.state.users).map(uname => ({
+        username: uname,
+        id: this.state.users[uname].id,
+        isVideoEnabled: this.state.users[uname].isVideoEnabled,
+        isAudioEnabled: this.state.users[uname].isAudioEnabled
+      })));
+      
       // Robust search: find by ID, or fallback to something else if needed
       let username = Object.keys(this.state.users).find(
         uname => this.state.users[uname].id === userId?.toString()
       );
       
-      // If not found by ID, this might be an issue with guest IDs.
-      // But we should have unique IDs now.
+      console.log('🎥 Found username for userId', userId, ':', username);
       
       if (username) {
         this.handleUserMediaStateChanged(username, mediaState.isVideoEnabled, mediaState.isAudioEnabled);
+      } else {
+        console.warn('🎥 Could not find user with ID:', userId);
       }
     });
 
     // Room joined - receive existing participants when joining mid-call
     socketService.on('room-joined', async (data: any) => {
-      console.log('Room joined event received:', data);
+      console.log('🚪 Room joined event received:', data);
+      console.log('🚪 Participants:', JSON.stringify(data.participants, null, 2));
       const { participants, isHost } = data;
 
       // Store our host status
@@ -304,27 +318,35 @@ class WebRTCService {
               participant.userId.toString() === this.state.users[this.state.currentUser || '']?.id);
 
           if (!isSelf) {
-            console.log('Adding existing participant from room-joined:', participant.userName);
+            const mediaState = participant.mediaState || { isVideoEnabled: true, isAudioEnabled: true };
+            console.log('🚪 Adding existing participant from room-joined:', participant.userName, 'with mediaState:', mediaState);
             newUsers[participant.userName] = {
               username: participant.userName,
               id: participant.userId?.toString() || `remote_${Date.now()}`,
               isLocal: false,
-              isVideoEnabled: participant.mediaState?.isVideoEnabled ?? true,
-              isAudioEnabled: participant.mediaState?.isAudioEnabled ?? true,
+              isVideoEnabled: mediaState.isVideoEnabled,
+              isAudioEnabled: mediaState.isAudioEnabled,
               isHost: participant.isHost ?? false,
             };
+            console.log('🚪 Added user:', newUsers[participant.userName]);
           } else {
-            // Update our own ID and host flag from the server
-            console.log('Updating local user ID from server:', participant.userId);
+            // Update our own ID and host flag from the server, but preserve local media state
+            console.log('🚪 Updating local user ID from server:', participant.userId);
             if (this.state.currentUser) {
+              const currentLocalState = newUsers[this.state.currentUser];
               newUsers[this.state.currentUser] = {
                 ...newUsers[this.state.currentUser],
                 id: participant.userId?.toString(),
                 isHost: !!isHost,
+                // Preserve the local media state that was set during joinUser
+                isVideoEnabled: currentLocalState?.isVideoEnabled ?? true,
+                isAudioEnabled: currentLocalState?.isAudioEnabled ?? true,
               };
+              console.log('🚪 Updated self:', newUsers[this.state.currentUser]);
             }
           }
         }
+        console.log('🚪 Final users state:', newUsers);
         this.updateState({ users: newUsers });
       }
     });
@@ -636,7 +658,14 @@ class WebRTCService {
       // Join socket room
       if (socketService.isSocketConnected()) {
         console.log('Emitting join-room event...');
-        socketService.emit('join-room', { roomId, username });
+        socketService.emit('join-room', { 
+          roomId, 
+          username,
+          mediaState: {
+            isVideoEnabled: initialVideoEnabled,
+            isAudioEnabled: initialAudioEnabled
+          }
+        });
       } else {
         console.error('Socket not available!');
       }

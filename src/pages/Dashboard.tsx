@@ -399,7 +399,7 @@ const Dashboard = () => {
             />
           </div>
 
-          <div onClick={handleLogout} className="cursor-pointer">
+          <div onClick={handleLogout} className="cursor-pointer hidden">
             <MeetingActionCard
               icon={LogOut}
               title="Logout"
@@ -408,7 +408,7 @@ const Dashboard = () => {
             />
           </div>
 
-          <div className="cursor-pointer opacity-50">
+          <div className="cursor-pointer opacity-50 hidden">
             <MeetingActionCard
               icon={Plus}
               title="More"

@@ -219,19 +219,6 @@ const ControlBar = ({
                 <Circle className="w-4 h-4 mr-2 text-destructive" />
                 Record Meeting
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Captions className="w-4 h-4 mr-2" />
-                Enable Captions
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <LayoutGrid className="w-4 h-4 mr-2" />
-                Change Layout
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 

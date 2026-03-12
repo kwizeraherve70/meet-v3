@@ -2,6 +2,7 @@ import React, { createContext, useState, useEffect } from 'react';
 import { apiClient, ApiError } from '@/lib/api';
 import { socketService } from '@/lib/socket';
 
+
 export interface User {
   id?: number;
   name: string;
@@ -118,42 +119,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // ================= GUEST LOGIN =================
   const loginAsGuest = (guestName: string, token: string, id: string) => {
-    console.log('>>> loginAsGuest FUNCTION CALLED <<<');
-    console.log('>>> Received parameters:');
-    console.log('    guestName:', guestName);
-    console.log('    token:', token);
-    console.log('    id:', id);
-    
-    if (!token || !id) {
-      console.error('>>> ERROR: token or id is undefined!');
-      console.error('    token:', token);
-      console.error('    id:', id);
-    }
-    
     const guestUser: User = { name: guestName };
 
-    console.log('>>> Setting React state...');
     setUser(guestUser);
     setGuestToken(token);
     setGuestId(id);
     setIsGuest(true);
 
-    console.log('>>> Saving to localStorage...');
-    try {
-      localStorage.setItem('guestToken', token);
-      localStorage.setItem('guestId', id);
-      localStorage.setItem('webrtc_guest_user', JSON.stringify(guestUser));
-      console.log('>>> localStorage.setItem completed');
-    } catch (error) {
-      console.error('>>> ERROR saving to localStorage:', error);
-    }
-    
-    // Verify it was saved
-    const saved = localStorage.getItem('guestToken');
-    console.log('>>> Verification - guestToken now in localStorage:', saved || 'NULL');
-    
-    
-    console.log('>>> loginAsGuest COMPLETE <<<');
+    // Update apiClient in-memory token immediately so the socket uses the
+    // new token rather than any stale token loaded at construction time.
+    apiClient.setGuestToken(token);
+
+    localStorage.setItem('guestId', id);
+    localStorage.setItem('webrtc_guest_user', JSON.stringify(guestUser));
   };
 
   // ================= LOGOUT GUEST =================

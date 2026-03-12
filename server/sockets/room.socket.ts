@@ -69,6 +69,9 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
 
       updateLastActivity(socket.id);
 
+      // ✅ Extract initial media state from client if provided
+      const initialMediaState = data.mediaState || { isVideoEnabled: true, isAudioEnabled: true };
+
       // Validate room access
       const validation = await validateRoomAccess(socket, roomId);
       if (!validation.valid) {
@@ -101,6 +104,12 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
 
       // Add socket to room state
       addSocketToRoom(socket.id, roomId, isHost);
+
+      // ✅ Set initial media state on socket
+      const socketState = getSocket(socket.id);
+      if (socketState) {
+        socketState.mediaState = initialMediaState;
+      }
 
       // Join socket to room namespace
       socket.join(`room-${roomId}`);
@@ -153,6 +162,8 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
         totalParticipants: participants.length,
       });
 
+      console.log('🚪 SERVER: Sending room-joined to', user.name, 'with participants:', JSON.stringify(participants, null, 2));
+
       // Send current participants to joining user
       socket.emit('room-joined', {
         roomId,
@@ -162,10 +173,12 @@ export function registerRoomHandlers(socket: Socket, io: SocketIOServer): void {
 
       // Announce new user to others in room IMMEDIATELY (before sync-peers)
       // This ensures existing users know about the new participant right away
+      console.log('🚪 SERVER: Broadcasting user-joined for', user.name, 'with mediaState:', socketState?.mediaState);
       socket.broadcast.to(`room-${roomId}`).emit('user-joined', {
         userId: user.id || user.guestId,
         userName: user.name,
         isHost,
+        mediaState: socketState?.mediaState || { isVideoEnabled: true, isAudioEnabled: true },
       });
 
       // If there are existing participants, request peer setup for mid-call join

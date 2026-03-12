@@ -16,6 +16,7 @@ interface ParticipantsSidebarProps {
   onMuteAll?: () => void;
   onToggleMyAudio?: () => void;
   onToggleMyVideo?: () => void;
+  onInviteOthers?: () => void;
 }
 
 const ParticipantsSidebar = ({
@@ -29,6 +30,7 @@ const ParticipantsSidebar = ({
   onMuteAll,
   onToggleMyAudio,
   onToggleMyVideo,
+  onInviteOthers,
 }: ParticipantsSidebarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -38,11 +40,20 @@ const ParticipantsSidebar = ({
     const participant = {
       id: user.id || username,
       name: username,
-      isMuted: !user.isAudioEnabled,
-      isVideoOn: user.isVideoEnabled,
+      isMuted: !(user.isAudioEnabled ?? true),
+      isVideoOn: user.isVideoEnabled ?? true,
       isHost: user.isHost ?? false,
       isMe: username === currentUser,
     };
+    
+    console.log('👥 Participant mapped:', {
+      username,
+      id: user.id,
+      isVideoEnabled: user.isVideoEnabled,
+      isAudioEnabled: user.isAudioEnabled,
+      isVideoOn: participant.isVideoOn,
+      isMuted: participant.isMuted
+    });
     
     return participant;
   });
@@ -147,37 +158,39 @@ const ParticipantsSidebar = ({
                       </span>
                     )}
 
-                    {/* Camera icon */}
-                    {isCurrentUserHost && participant.isMe ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`h-7 w-7 transition-colors ${
-                          !participant.isVideoOn
-                            ? "text-destructive hover:text-green-500 hover:bg-green-500/10"
-                            : "text-green-500 hover:text-destructive hover:bg-destructive/10"
-                        }`}
-                        title={!participant.isVideoOn ? "Enable my camera" : "Disable my camera"}
-                        onClick={() => onToggleMyVideo?.()}
-                      >
-                        {!participant.isVideoOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
-                      </Button>
-                    ) : isCurrentUserHost && !participant.isMe && participant.isVideoOn ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-green-500 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title="Click to disable camera"
-                        onClick={() => onDisableVideo?.(participant.id)}
-                      >
-                        <Video className="w-4 h-4" />
-                      </Button>
-                    ) : (
-                      <span title={participant.isVideoOn ? "Video on" : "Video off"}>
-                        {participant.isVideoOn
-                          ? <Video className="w-4 h-4 text-green-500" />
-                          : <VideoOff className="w-4 h-4 text-destructive" />}
-                      </span>
+                    {/* Camera icon - Only show for hosts */}
+                    {isCurrentUserHost && (
+                      <>
+                        {participant.isMe ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-7 w-7 transition-colors ${
+                              !participant.isVideoOn
+                                ? "text-destructive hover:text-green-500 hover:bg-green-500/10"
+                                : "text-green-500 hover:text-destructive hover:bg-destructive/10"
+                            }`}
+                            title={!participant.isVideoOn ? "Enable my camera" : "Disable my camera"}
+                            onClick={() => onToggleMyVideo?.()}
+                          >
+                            {!participant.isVideoOn ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                          </Button>
+                        ) : participant.isVideoOn ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-green-500 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            title="Click to disable camera"
+                            onClick={() => onDisableVideo?.(participant.id)}
+                          >
+                            <Video className="w-4 h-4" />
+                          </Button>
+                        ) : (
+                          <span title="Video off">
+                            <VideoOff className="w-4 h-4 text-destructive" />
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -201,7 +214,7 @@ const ParticipantsSidebar = ({
               Mute All
             </Button>
           )}
-          <Button variant="default" className="w-full">
+          <Button variant="default" className="w-full" onClick={onInviteOthers}>
             Invite Others
           </Button>
         </div>

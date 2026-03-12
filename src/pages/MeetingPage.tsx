@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { WebRTCProvider } from "@/context/WebRTCContext";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/context/ToastContext";
 import MeetingHeader from "@/components/meeting/MeetingHeader";
 import VideoGrid from "@/components/meeting/VideoGrid";
 import ControlBar from "@/components/meeting/ControlBar";
@@ -16,7 +17,9 @@ import { socketService } from "@/lib/socket";
 const MeetingRoom = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const { joinUser, state, isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio, endCall, startScreenShare, stopScreenShare, isHost } = useWebRTC();
   
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
@@ -41,10 +44,13 @@ const MeetingRoom = () => {
   const initialVideo = preferences?.isVideoOn ?? true;
   const initialMic = !(preferences?.isMuted ?? false);
 
+  // Room code (xxx-xxx-xxx) for redirects — numeric roomId in URL is unusable for PreJoinScreen
+  // location.state.roomCode is set by all navigate() callers; preferences?.roomId is a fallback
+  const roomCode = (location.state as any)?.roomCode || preferences?.roomId;
+
   useEffect(() => {
     if (!username || !roomId) {
-      // Redirect to prejoin screen with room ID if no username
-      navigate(`/${roomId || ''}`);
+      navigate(roomCode ? `/${roomCode}` : '/join');
       return;
     }
 
@@ -52,15 +58,13 @@ const MeetingRoom = () => {
       joinUser(username, roomId)
         .then(() => {
           setHasJoined(true);
-          // Media preferences are already applied during joinUser
-          // No need to toggle video/audio here
         })
         .catch((error) => {
           console.error('Failed to join meeting:', error);
-          navigate(`/${roomId || ''}`);
+          navigate(roomCode ? `/${roomCode}` : '/join');
         });
     }
-  }, [username, roomId, hasJoined, joinUser, navigate]);
+  }, [username, roomId, hasJoined, joinUser, navigate, roomCode]);
 
   // Setup socket listener for emoji reactions
   useEffect(() => {
@@ -216,6 +220,29 @@ const MeetingRoom = () => {
     socketService.emit('host-mute-all', { roomId: parseInt(roomId) });
   };
 
+  const handleInviteOthers = () => {
+    if (!roomId) return;
+
+    // roomCode is the component-level xxx-xxx-xxx code from location.state or preferences
+    const inviteLink = roomCode
+      ? `${window.location.origin}/${roomCode}`
+      : `${window.location.origin}/join`;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      showToast({
+        type: 'success',
+        title: 'Invite Link Copied',
+        description: 'Share this link with anyone - they can join without an account!',
+      });
+    }).catch(() => {
+      showToast({
+        type: 'error',
+        description: 'Failed to copy link. Please try again.',
+      });
+    });
+  };
+
   const isSidebarOpen = isParticipantsOpen || isChatOpen;
   const participantCount = Object.keys(state.users).length;
 
@@ -283,6 +310,7 @@ const MeetingRoom = () => {
         onMuteAll={handleMuteAll}
         onToggleMyAudio={() => toggleAudio(!isAudioEnabled)}
         onToggleMyVideo={() => toggleVideo(!isVideoEnabled)}
+        onInviteOthers={handleInviteOthers}
       />
 
       <ChatSidebar

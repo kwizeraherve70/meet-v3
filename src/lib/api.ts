@@ -79,6 +79,15 @@ class ApiClient {
   }
 
   /**
+   * Set guest token — updates both in-memory and localStorage so the socket
+   * picks up the new token immediately (avoids stale token from construction time).
+   */
+  setGuestToken(token: string): void {
+    this.accessToken = token;
+    localStorage.setItem('guestToken', token);
+  }
+
+  /**
    * Clear user tokens (does NOT remove guest token)
    */
   clearTokens(): void {
