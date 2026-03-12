@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Mic, MicOff, Video, VideoOff, Pin, MoreHorizontal, User } from "lucide-react";
+import { Mic, MicOff, VideoOff, Pin, User } from "lucide-react";
 
 interface VideoCardProps {
   name: string;
@@ -85,20 +85,6 @@ const VideoCard = ({
         </div>
       )}
 
-      {/* Overlay controls on hover */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between p-2">
-        <div className="flex items-center justify-between">
-          <div className="flex-1" />
-          <div className="flex items-center gap-1">
-            <button className="p-1.5 rounded-md bg-black/40 hover:bg-black/60 transition-colors" title="Pin participant">
-              <Pin className="w-4 h-4" />
-            </button>
-            <button className="p-1.5 rounded-md bg-black/40 hover:bg-black/60 transition-colors" title="More options">
-              <MoreHorizontal className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
 
       {/* Name tag and media status */}
       <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none">

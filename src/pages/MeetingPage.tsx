@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { WebRTCProvider } from "@/context/WebRTCContext";
+import { RecordingProvider, useRecording } from "@/context/RecordingContext";
 import { useWebRTC } from "@/hooks/useWebRTC";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/context/ToastContext";
@@ -21,6 +22,7 @@ const MeetingRoom = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const { joinUser, state, isVideoEnabled, isAudioEnabled, toggleVideo, toggleAudio, endCall, startScreenShare, stopScreenShare, isHost } = useWebRTC();
+  const { isRecording, recordingDuration } = useRecording();
   
   const [isParticipantsOpen, setIsParticipantsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -259,7 +261,11 @@ const MeetingRoom = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden relative">
-      <MeetingHeader meetingId={roomId || "Unknown"} />
+      <MeetingHeader 
+        meetingId={roomId || "Unknown"} 
+        isRecording={isRecording}
+        recordingDuration={recordingDuration}
+      />
       
       <VideoGrid 
         isSidebarOpen={isSidebarOpen}
@@ -287,6 +293,8 @@ const MeetingRoom = () => {
         onToggleVideo={() => toggleVideo(!isVideoEnabled)}
         isScreenSharing={state.isScreenSharing}
         onToggleScreenShare={handleToggleScreenShare}
+        localStream={state.localStream}
+        remoteStreams={state.remoteStreams}
       />
 
       <FloatingEmojis 
@@ -330,10 +338,26 @@ const MeetingRoom = () => {
 
 const MeetingPage = () => {
   const { roomId } = useParams<{ roomId: string }>();
+  const { user } = useAuth();
+
+  // Get username from preferences as fallback
+  const getMeetingPreferences = () => {
+    try {
+      const saved = localStorage.getItem('meetingPreferences');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const preferences = getMeetingPreferences();
+  const username = user?.name || preferences?.username || 'User';
   
   return (
     <WebRTCProvider roomId={roomId}>
-      <MeetingRoom />
+      <RecordingProvider roomId={roomId || 'unknown'} username={username}>
+        <MeetingRoom />
+      </RecordingProvider>
     </WebRTCProvider>
   );
 };

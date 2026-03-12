@@ -30,6 +30,10 @@ export const ClientEvents = {
   // Emoji reactions
   SEND_EMOJI_REACTION: 'send-emoji-reaction',
   
+  // Recording events
+  START_RECORDING: 'start-recording',
+  STOP_RECORDING: 'stop-recording',
+  
   // Connection events
   PING: 'ping',
   RECONNECT: 'reconnect',
@@ -64,6 +68,11 @@ export const ServerEvents = {
   
   // Emoji reactions
   EMOJI_REACTION_RECEIVED: 'emoji-reaction-received',
+  
+  // Recording events
+  RECORDING_STARTED: 'recording-started',
+  RECORDING_STOPPED: 'recording-stopped',
+  RECORDING_ERROR: 'recording-error',
   
   // Connection events
   PONG: 'pong',

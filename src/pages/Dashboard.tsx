@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiClient, RoomResponse } from "@/lib/api";
+import RoomRecordingsDialog from "@/components/dashboard/RoomRecordingsDialog";
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -27,6 +28,7 @@ const Dashboard = () => {
   const [createdRoom, setCreatedRoom] = useState<RoomResponse | null>(null);
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const [recordingsDialogRoom, setRecordingsDialogRoom] = useState<RoomResponse | null>(null);
 
   const currentTime = new Date().toLocaleTimeString("en-US", {
     hour: "2-digit",
@@ -459,6 +461,10 @@ const Dashboard = () => {
                       date={new Date(room.createdAt).toLocaleDateString()}
                       participants={room.participantCount ?? 0}
                       isLive={room.isActive}
+                      onViewRecordings={(e) => {
+                        e.stopPropagation();
+                        setRecordingsDialogRoom(room);
+                      }}
                     />
                   </div>
                   {/* Delete button overlay */}
@@ -480,6 +486,13 @@ const Dashboard = () => {
             </div>
           )}
         </div>
+
+        <RoomRecordingsDialog
+          open={!!recordingsDialogRoom}
+          onOpenChange={(open) => { if (!open) setRecordingsDialogRoom(null); }}
+          roomId={recordingsDialogRoom?.id ?? 0}
+          roomTitle={recordingsDialogRoom?.title ?? ""}
+        />
 
         {/* Quick Tips */}
         <div className="bg-primary/5 border border-primary/20 rounded-lg p-6">

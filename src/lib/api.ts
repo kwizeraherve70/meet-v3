@@ -3,7 +3,7 @@
  * Handles authentication, guest sessions, room management and API calls
  */
 
-const API_BASE_URL = 'http://localhost:3001';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 export interface ApiError {
   message: string;
@@ -48,6 +48,15 @@ export interface MessageResponse {
   userName: string;
   content: string;
   created_at: string;
+}
+
+export interface RecordingItem {
+  id: number;
+  title: string;
+  duration: number;
+  fileUrl: string;
+  thumbnail: string | null;
+  createdAt: string;
 }
 
 class ApiClient {
@@ -272,6 +281,10 @@ class ApiClient {
       order,
     });
     return this.request(`/api/rooms/${roomId}/messages?${params}`);
+  }
+
+  async getRoomRecordings(roomId: number): Promise<{ recordings: RecordingItem[] }> {
+    return this.request(`/api/recordings/room/${roomId}`);
   }
 }
 

@@ -1,8 +1,11 @@
 import express, { Express } from 'express';
+import path from 'path';
 import cors from 'cors';
+import multer from 'multer';
 import prisma from './database/prisma.js';
 import authRoutes from './routes/auth.routes.js';
 import roomRoutes from './routes/rooms.routes.js';
+import recordingsRoutes from './routes/recordings.routes.js';
 import { authMiddleware } from './middleware/auth.middleware.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
 
@@ -14,6 +17,14 @@ import { errorHandler, notFoundHandler } from './middleware/error.middleware.js'
 export function createApp(): Express {
   const app = express();
 
+  // Configure multer for file uploads
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 500 * 1024 * 1024, // 500MB max file size
+    },
+  });
+
   // ============================================================================
   // MIDDLEWARE STACK (executed in order)
   // ============================================================================
@@ -21,6 +32,8 @@ export function createApp(): Express {
   // 1. Core middleware
   app.use(cors());
   app.use(express.json());
+  app.use(express.static('public')); // Serve static files for recordings
+  app.use('/recordings', express.static(path.join(process.cwd(), 'recordings')));
 
   // 2. Authentication middleware (optional - sets req.user if token valid)
   app.use(authMiddleware);
@@ -60,6 +73,7 @@ export function createApp(): Express {
 
   app.use('/auth', authRoutes);
   app.use('/api/rooms', roomRoutes);
+  app.use('/api/recordings', upload.single('file'), recordingsRoutes);
 
   // ============================================================================
   // ERROR HANDLING (must be registered last)
