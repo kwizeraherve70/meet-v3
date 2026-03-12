@@ -40,7 +40,7 @@ export interface SocketEvents {
   'host-mute-all': { roomId: string | number };
 
   // Server events
-  'user-joined': { userId: string | number; userName: string; isHost?: boolean };
+  'user-joined': { userId: string | number; userName: string; isHost?: boolean; mediaState?: { isVideoEnabled: boolean; isAudioEnabled: boolean } };
   'user-left': { userId: string | number; userName: string };
   'message-received': { id: string | number; userId: string | number; userName: string; content: string; timestamp: string };
   'message-history': { roomId: string | number; messages: any[]; count: number };

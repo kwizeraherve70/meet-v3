@@ -85,9 +85,6 @@ const LoginPage = () => {
             <Video className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">Meeting</h1>
-          <p className="text-muted-foreground mt-1">
-            {isLogin ? 'Sign in to your account' : 'Create a new account'}
-          </p>
         </div>
 
         <Card>
@@ -183,12 +180,6 @@ const LoginPage = () => {
             </div>
           </CardContent>
         </Card>
-
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          {isLogin
-            ? 'Use demo@example.com / password123 to test'
-            : 'Create an account to get started'}
-        </p>
       </div>
     </div>
   );

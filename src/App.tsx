@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import PreJoinScreen from "./pages/PreJoinScreen";
 import MeetingPage from "./pages/MeetingPage";
 import LoginPage from "./pages/LoginPage";
+import SchedulePage from "./pages/SchedulePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,11 @@ const App = () => (
                 <Route path="/" element={
                   <ProtectedRoute>
                     <Dashboard />
+                  </ProtectedRoute>
+                } />
+                <Route path="/schedule" element={
+                  <ProtectedRoute>
+                    <SchedulePage />
                   </ProtectedRoute>
                 } />
                 <Route path="/join" element={<PreJoinScreen />} />

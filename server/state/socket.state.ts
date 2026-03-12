@@ -149,6 +149,14 @@ export function addSocketToRoom(
   state.isHost = isHost;
   state.joinedRoomAt = new Date();
   state.lastActivity = new Date();
+  
+  // Initialize media state if not already set
+  if (!state.mediaState) {
+    state.mediaState = {
+      isVideoEnabled: true,
+      isAudioEnabled: true
+    };
+  }
 
   // Map room to socket
   if (!roomToSockets.has(roomId)) {

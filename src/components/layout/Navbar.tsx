@@ -40,10 +40,10 @@ const Navbar = () => {
 
         {/* Right section */}
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="hidden">
             <Bell className="w-5 h-5" />
           </Button>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="hidden">
             <Settings className="w-5 h-5" />
           </Button>
           <div className="h-6 w-px bg-border mx-2" />
